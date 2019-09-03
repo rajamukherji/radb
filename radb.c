@@ -10,6 +10,7 @@
 #include <gc.h>
 
 #include "string_store.h"
+#include "string_index.h"
 
 static stringmap_t Globals[1] = {STRINGMAP_INIT};
 
@@ -72,7 +73,7 @@ static ml_value_t *ml_string_store_create(void *Data, int Count, ml_value_t **Ar
 	ML_CHECK_ARG_TYPE(1, MLIntegerT);
 	ml_string_store_t *Store = new(ml_string_store_t);
 	Store->Type = StringStoreT;
-	Store->Handle = string_store_create(ml_string_value(Args[0]), ml_integer_value(Args[1]), Count > 2);
+	Store->Handle = string_store_create(ml_string_value(Args[0]), ml_integer_value(Args[1]));
 	return (ml_value_t *)Store;
 }
 
@@ -98,15 +99,41 @@ static ml_value_t *ml_string_store_set(void *Data, int Count, ml_value_t **Args)
 	return Args[2];
 }
 
-static ml_value_t *ml_string_store_insert(void *Data, int Count, ml_value_t **Args) {
-	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
-	size_t Index = string_store_insert(Store->Handle, ml_string_value(Args[1]), ml_string_length(Args[1]));
+typedef struct ml_string_index_t {
+	const ml_type_t *Type;
+	string_index_t *Handle;
+} ml_string_index_t;
+
+static ml_type_t *StringIndexT;
+
+static ml_value_t *ml_string_index_open(void *Data, int Count, ml_value_t **Args) {
+	ML_CHECK_ARG_COUNT(1);
+	ML_CHECK_ARG_TYPE(0, MLStringT);
+	ml_string_index_t *Store = new(ml_string_index_t);
+	Store->Type = StringIndexT;
+	Store->Handle = string_index_open(ml_string_value(Args[0]));
+	if (!Store->Handle) return ml_error("StoreError", "Error opening string store");
+	return (ml_value_t *)Store;
+}
+
+static ml_value_t *ml_string_index_create(void *Data, int Count, ml_value_t **Args) {
+	ML_CHECK_ARG_COUNT(1);
+	ML_CHECK_ARG_TYPE(0, MLStringT);
+	ml_string_index_t *Store = new(ml_string_index_t);
+	Store->Type = StringIndexT;
+	Store->Handle = string_index_create(ml_string_value(Args[0]));
+	return (ml_value_t *)Store;
+}
+
+static ml_value_t *ml_string_index_insert(void *Data, int Count, ml_value_t **Args) {
+	ml_string_index_t *Store = (ml_string_index_t *)Args[0];
+	size_t Index = string_index_insert(Store->Handle, ml_string_value(Args[1]));
 	return ml_integer(Index);
 }
 
-static ml_value_t *ml_string_store_lookup(void *Data, int Count, ml_value_t **Args) {
-	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
-	size_t Index = string_store_lookup(Store->Handle, ml_string_value(Args[1]), ml_string_length(Args[1]));
+static ml_value_t *ml_string_index_search(void *Data, int Count, ml_value_t **Args) {
+	ml_string_index_t *Store = (ml_string_index_t *)Args[0];
+	size_t Index = string_index_search(Store->Handle, ml_string_value(Args[1]));
 	return ml_integer(Index);
 }
 
@@ -125,8 +152,12 @@ int main(int Argc, const char *Argv[]) {
 	ml_method_by_name("alloc", 0, ml_string_store_alloc, StringStoreT, NULL);
 	ml_method_by_name("get", 0, ml_string_store_get, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("set", 0, ml_string_store_set, StringStoreT, MLIntegerT, MLStringT, NULL);
-	ml_method_by_name("insert", 0, ml_string_store_insert, StringStoreT, MLStringT, NULL);
-	ml_method_by_name("lookup", 0, ml_string_store_lookup, StringStoreT, MLStringT, NULL);
+
+	StringIndexT = ml_type(MLAnyT, "string-index");
+	stringmap_insert(Globals, "string_index_open", ml_function(0, ml_string_index_open));
+	stringmap_insert(Globals, "string_index_create", ml_function(0, ml_string_index_create));
+	ml_method_by_name("insert", 0, ml_string_index_insert, StringIndexT, MLStringT, NULL);
+	ml_method_by_name("search", 0, ml_string_index_search, StringIndexT, MLStringT, NULL);
 
 	const char *FileName = 0;
 	for (int I = 1; I < Argc; ++I) {

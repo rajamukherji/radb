@@ -20,7 +20,8 @@ else
 endif
 
 common_objects = \
-	string_store.o
+	string_store.o \
+	string_index.o
 
 platform_objects =
 
