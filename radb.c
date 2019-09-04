@@ -82,10 +82,17 @@ static ml_value_t *ml_string_store_alloc(void *Data, int Count, ml_value_t **Arg
 	return ml_integer(string_store_alloc(Store->Handle));
 }
 
+static ml_value_t *ml_string_store_reserve(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
+	string_store_reserve(Store->Handle, ml_integer_value(Args[1]));
+	return Args[0];
+}
+
 static ml_value_t *ml_string_store_get(void *Data, int Count, ml_value_t **Args) {
 	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
 	size_t Index = ml_integer_value(Args[1]);
 	size_t Length = string_store_get_size(Store->Handle, Index);
+	if (Length == INVALID_INDEX) return ml_error("IndexError", "Invalid index");
 	char *Value = snew(Length);
 	string_store_get_value(Store->Handle, Index, Value);
 	Value[Length] = 0;
@@ -147,9 +154,10 @@ int main(int Argc, const char *Argv[]) {
 	stringmap_insert(Globals, "debug", ml_function(0, debug));
 
 	StringStoreT = ml_type(MLAnyT, "string-store");
-	stringmap_insert(Globals, "string_store_open", ml_function(0, ml_string_store_open));
-	stringmap_insert(Globals, "string_store_create", ml_function(0, ml_string_store_create));
+	stringmap_insert(Globals, "store_open", ml_function(0, ml_string_store_open));
+	stringmap_insert(Globals, "store_create", ml_function(0, ml_string_store_create));
 	ml_method_by_name("alloc", 0, ml_string_store_alloc, StringStoreT, NULL);
+	ml_method_by_name("reserve", 0, ml_string_store_reserve, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("get", 0, ml_string_store_get, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("set", 0, ml_string_store_set, StringStoreT, MLIntegerT, MLStringT, NULL);
 

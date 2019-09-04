@@ -14,6 +14,8 @@
 #define new(T) ((T *)malloc(sizeof(T)))
 #endif
 
+#define CHUNK_SIZE 512
+
 typedef struct entry_t {
 	uint32_t Link, Length;
 } entry_t;
@@ -24,69 +26,77 @@ typedef struct data_t {
 } data_t;
 
 typedef struct header_t {
-	uint32_t NodeSize, Reserved;
+	uint32_t NodeSize;
 	uint32_t NumEntries, NumFreeEntries, FreeEntry;
 	uint32_t NumNodes, NumFreeNodes, FreeNode;
+	uint32_t Reserved;
 	entry_t Entries[];
 } header_t;
 
 struct string_store_t {
 	const char *Prefix;
-	union {
-		void *IndexMap;
-		header_t *Index;
-	};
-	void *DataMap;
-	size_t IndexMapSize, DataMapSize;
-	int IndexFd, DataFd;
+	header_t *Header;
+	void *Data;
+	size_t HeaderSize;
+	int HeaderFd, DataFd;
 };
 
 string_store_t *string_store_create(const char *Prefix, size_t RequestedSize) {
 	uint32_t NodeSize = 16;
 	while (NodeSize < RequestedSize) NodeSize *= 2;
-	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.entries", Prefix);
-	int Fd = open(FileName, O_RDWR | O_CREAT, 0777);
-	header_t Header = {NodeSize, 0,};
-	write(Fd, &Header, sizeof(Header));
-	close(Fd);
-	sprintf(FileName, "%s.data", Prefix);
-	Fd = open(FileName, O_RDWR | O_CREAT, 0777);
-	close(Fd);
-	return string_store_open(Prefix);
-}
-
-string_store_t *string_store_open(const char *Prefix) {
-	struct stat Stat[1];
-	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.entries", Prefix);
-	if (stat(FileName, Stat)) return NULL;
-	int IndexFd = open(FileName, O_RDWR, 0777);
-	size_t IndexMapSize = Stat->st_size;
-	void *IndexMap = mmap(NULL, IndexMapSize, PROT_READ | PROT_WRITE, MAP_SHARED, IndexFd, 0);
-	sprintf(FileName, "%s.data", Prefix);
-	if (stat(FileName, Stat)) {
-		munmap(IndexMap, IndexMapSize);
-		return NULL;
-	}
-	int DataFd = open(FileName, O_RDWR, 0777);
-	size_t DataMapSize = Stat->st_size;
-	void *DataMap = NULL;
-	if (DataMapSize) {
-		DataMap = mmap(NULL, DataMapSize, PROT_READ | PROT_WRITE, MAP_SHARED, DataFd, 0);
-	}
+	int NumEntries = (CHUNK_SIZE - sizeof(header_t)) / sizeof(entry_t);
+	int NumNodes = CHUNK_SIZE / NodeSize;
 	string_store_t *Store = new(string_store_t);
 #ifndef NO_GC
 	Store->Prefix = strdup(Prefix);
 #else
 	Store->Prefix = GC_strdup(Prefix);
 #endif
-	Store->IndexMap = IndexMap;
-	Store->IndexMapSize = IndexMapSize;
-	Store->IndexFd = IndexFd;
-	Store->DataMap = DataMap;
-	Store->DataMapSize = DataMapSize;
-	Store->DataFd = DataFd;
+	char FileName[strlen(Prefix) + 10];
+	sprintf(FileName, "%s.entries", Prefix);
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderSize = sizeof(header_t) + NumEntries * sizeof(entry_t);
+	ftruncate(Store->HeaderFd, Store->HeaderSize);
+	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	Store->Header->NodeSize = NodeSize;
+	Store->Header->NumEntries = Store->Header->NumFreeEntries = NumEntries;
+	Store->Header->FreeEntry = 0;
+	Store->Header->NumNodes = NumNodes;
+	Store->Header->NumFreeNodes = NumNodes;
+	Store->Header->FreeNode = 0;
+	for (int I = 0; I < NumEntries; ++I) {
+		Store->Header->Entries[I].Link = I + 1;
+		Store->Header->Entries[I].Length = INVALID_INDEX;
+	}
+	sprintf(FileName, "%s.data", Prefix);
+	Store->DataFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	ftruncate(Store->DataFd, NumNodes * NodeSize);
+	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
+	for (int I = 0; I < NumNodes; ++I) {
+		((data_t *)(Store->Data + I * NodeSize))->Link = I + 1;
+	}
+	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+	msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
+	return Store;
+}
+
+string_store_t *string_store_open(const char *Prefix) {
+	string_store_t *Store = new(string_store_t);
+#ifndef NO_GC
+	Store->Prefix = strdup(Prefix);
+#else
+	Store->Prefix = GC_strdup(Prefix);
+#endif
+	struct stat Stat[1];
+	char FileName[strlen(Prefix) + 10];
+	sprintf(FileName, "%s.entries", Prefix);
+	if (stat(FileName, Stat)) return NULL;
+	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	Store->HeaderSize = Stat->st_size;
+	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	sprintf(FileName, "%s.data", Prefix);
+	Store->DataFd = open(FileName, O_RDWR, 0777);
+	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
 	return Store;
 }
 
@@ -95,142 +105,146 @@ void string_store_close(string_store_t *Store) {
 }
 
 void string_store_reserve(string_store_t *Store, size_t Index) {
-
+	while (Index >= Store->Header->NumEntries || Store->Header->Entries[Index].Length == INVALID_INDEX) string_store_alloc(Store);
 }
 
 size_t string_store_alloc(string_store_t *Store) {
 	size_t Index;
-	if (Store->Index->NumFreeEntries) {
-		Index = Store->Index->FreeEntry;
-		Store->Index->FreeEntry = Store->Index->Entries[Index].Link;
-		--Store->Index->NumFreeEntries;
-	} else {
-		size_t MapSize = Store->IndexMapSize + sizeof(entry_t);
-		msync(Store->IndexMap, Store->IndexMapSize, MS_SYNC);
-		ftruncate(Store->IndexFd, MapSize);
-		Store->IndexMap = mremap(Store->IndexMap, Store->IndexMapSize, MapSize, MREMAP_MAYMOVE);
-		Index = Store->Index->NumEntries++;
-		Store->IndexMapSize = MapSize;
+	if (!Store->Header->NumFreeEntries) {
+		int NumEntries = CHUNK_SIZE / sizeof(entry_t);
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		msync(Store->Header, Store->HeaderSize, MS_SYNC);
+		ftruncate(Store->HeaderFd, HeaderSize);
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = I + 1;
+			Entries[I].Length = INVALID_INDEX;
+		}
+		Store->Header->FreeEntry = Store->Header->NumEntries;
+		Store->Header->NumEntries += NumEntries;
+		Store->Header->NumFreeEntries = NumEntries;
+		Store->HeaderSize = HeaderSize;
 	}
-	Store->Index->Entries[Index].Link = 0xFFFFFFFF;
-	Store->Index->Entries[Index].Length = 0;
-	msync(Store->IndexMap, Store->IndexMapSize, MS_ASYNC);
+	Index = Store->Header->FreeEntry;
+	Store->Header->FreeEntry = Store->Header->Entries[Index].Link;
+	--Store->Header->NumFreeEntries;
+	Store->Header->Entries[Index].Link = INVALID_INDEX;
+	Store->Header->Entries[Index].Length = 0;
+	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	return Index;
 }
 
 void string_store_free(string_store_t *Store, size_t Index) {
 	string_store_set(Store, Index, NULL, 0);
-	Store->Index->Entries[Index].Link = Store->Index->FreeEntry;
-	Store->Index->FreeEntry = Index;
-	++Store->Index->NumFreeEntries;
+	Store->Header->Entries[Index].Link = Store->Header->FreeEntry;
+	Store->Header->Entries[Index].Length = INVALID_INDEX;
+	Store->Header->FreeEntry = Index;
+	++Store->Header->NumFreeEntries;
 }
 
 size_t string_store_get_size(string_store_t *Store, size_t Index) {
-	if (Index >= Store->Index->NumEntries) return 0;
-	return Store->Index->Entries[Index].Length;
+	if (Index >= Store->Header->NumEntries) return INVALID_INDEX;
+	return Store->Header->Entries[Index].Length;
 }
 
 void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer) {
-	if (Index >= Store->Index->NumEntries) return;
-	size_t Length = Store->Index->Entries[Index].Length;
-	uint32_t Link = Store->Index->Entries[Index].Link;
-	uint32_t NodeSize = Store->Index->NodeSize;
-	data_t *Node = Store->DataMap + Link * NodeSize;
+	if (Index >= Store->Header->NumEntries) return;
+	size_t Length = Store->Header->Entries[Index].Length;
+	uint32_t Link = Store->Header->Entries[Index].Link;
+	uint32_t NodeSize = Store->Header->NodeSize;
+	data_t *Node = Store->Data + Link * NodeSize;
 	while (Length > NodeSize) {
 		memcpy(Buffer, Node->Chars, NodeSize - 4);
 		Buffer += NodeSize - 4;
 		Length -= NodeSize - 4;
-		Node = Store->DataMap + Node->Link * NodeSize;
+		Node = Store->Data + Node->Link * NodeSize;
 	}
 	memcpy(Buffer, Node, Length);
 }
 
 void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, size_t Length) {
-	if (Index >= Store->Index->NumEntries) return;
-	size_t OldLength = Store->Index->Entries[Index].Length;
-	Store->Index->Entries[Index].Length = Length;
-	uint32_t NodeSize = Store->Index->NodeSize;
-	size_t OldNumBlocks = OldLength > NodeSize ? 1 + (OldLength - NodeSize) / (NodeSize - 4) : (OldLength != 0);
-	size_t NewNumBlocks = Length > NodeSize ? 1 + (Length - NodeSize) / (NodeSize - 4) : (Length != 0);
+	if (Index >= Store->Header->NumEntries) return;
+	size_t OldLength = Store->Header->Entries[Index].Length;
+	if (OldLength == INVALID_INDEX) return;
+	Store->Header->Entries[Index].Length = Length;
+	uint32_t NodeSize = Store->Header->NodeSize;
+	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
+	size_t NewNumBlocks = (Length > NodeSize) ? 1 + (Length - 5) / (NodeSize - 4) : (Length != 0);
 	if (OldNumBlocks > NewNumBlocks) {
-		uint32_t FreeStart = Store->Index->Entries[Index].Link;
+		uint32_t FreeStart = Store->Header->Entries[Index].Link;
 		if (NewNumBlocks) {
-			data_t *Node = Store->DataMap + FreeStart * NodeSize;
+			data_t *Node = Store->Data + FreeStart * NodeSize;
 			while (Length > NodeSize) {
 				memcpy(Node->Chars, Buffer, NodeSize - 4);
 				Buffer += NodeSize - 4;
 				Length -= NodeSize - 4;
-				Node = Store->DataMap + Node->Link * NodeSize;
+				Node = Store->Data + Node->Link * NodeSize;
 			}
 			FreeStart = Node->Link;
 			memcpy(Node, Buffer, Length);
 		}
-		data_t *FreeEnd = Store->DataMap + FreeStart * NodeSize;
+		data_t *FreeEnd = Store->Data + FreeStart * NodeSize;
 		size_t NumFree = OldNumBlocks - NewNumBlocks;
-		Store->Index->NumFreeNodes += NumFree;
-		for (int I = NumFree; --I > 0;) FreeEnd = Store->DataMap + FreeEnd->Link * NodeSize;
-		FreeEnd->Link = Store->Index->FreeNode;
-		Store->Index->FreeNode = FreeStart;
+		Store->Header->NumFreeNodes += NumFree;
+		for (int I = NumFree; --I > 0;) FreeEnd = Store->Data + FreeEnd->Link * NodeSize;
+		FreeEnd->Link = Store->Header->FreeNode;
+		Store->Header->FreeNode = FreeStart;
 	} else if (OldNumBlocks < NewNumBlocks) {
 		size_t NumRequired = NewNumBlocks - OldNumBlocks;
-		size_t NumFree = Store->Index->NumFreeNodes;
+		size_t NumFree = Store->Header->NumFreeNodes;
 		if (NumRequired > NumFree) {
-			int Shortfall = NumRequired - NumFree;
-			size_t MapSize = Store->DataMapSize + Shortfall * NodeSize;
-			if (Store->DataMapSize) {
-				msync(Store->DataMap, Store->DataMapSize, MS_SYNC);
-				ftruncate(Store->DataFd, MapSize);
-				Store->DataMap = mremap(Store->DataMap, Store->DataMapSize, MapSize, MREMAP_MAYMOVE);
-			} else {
-				ftruncate(Store->DataFd, MapSize);
-				Store->DataMap = mmap(NULL, MapSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
-			}
+			int Shortfall = CHUNK_SIZE / NodeSize;
+			while (Shortfall < NumRequired - NumFree) Shortfall += CHUNK_SIZE / NodeSize;
+			size_t HeaderSize = (Store->Header->NumNodes + Shortfall) * NodeSize;
+			msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
+			ftruncate(Store->DataFd, HeaderSize);
+			Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
 			uint32_t FreeEnd;
 			if (NumFree > 0) {
-				FreeEnd = Store->Index->FreeNode;
-				for (int I = NumFree; --I > 0;) FreeEnd = ((data_t *)(Store->DataMap + FreeEnd * NodeSize))->Link;
-				FreeEnd = ((data_t *)(Store->DataMap + FreeEnd * NodeSize))->Link = Store->DataMapSize / NodeSize;
+				FreeEnd = Store->Header->FreeNode;
+				for (int I = NumFree; --I > 0;) FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link;
+				FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link = Store->Header->NumNodes;
 			} else {
-				FreeEnd = Store->Index->FreeNode = Store->DataMapSize / NodeSize;
+				FreeEnd = Store->Header->FreeNode = Store->Header->NumNodes;
 			}
-			Store->Index->NumNodes += Shortfall;
-			while (--Shortfall > 0) FreeEnd = ((data_t *)(Store->DataMap + FreeEnd * NodeSize))->Link = FreeEnd + 1;
-			Store->DataMapSize = MapSize;
-			Store->Index->NumFreeNodes = 0;
+			Store->Header->NumNodes += Shortfall;
+			Store->Header->NumFreeNodes += Shortfall - NumRequired;
+			while (--Shortfall > 0) FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link = FreeEnd + 1;
 		} else {
-			Store->Index->NumFreeNodes -= NumRequired;
+			Store->Header->NumFreeNodes -= NumRequired;
 		}
 		if (OldNumBlocks) {
-			data_t *Node = Store->DataMap + Store->Index->Entries[Index].Link * NodeSize;
+			data_t *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
 			for (int I = OldNumBlocks; --I > 0;) {
 				memcpy(Node->Chars, Buffer, NodeSize - 4);
 				Buffer += NodeSize - 4;
 				Length -= NodeSize - 4;
-				Node = Store->DataMap + Node->Link * NodeSize;
+				Node = Store->Data + Node->Link * NodeSize;
 			}
-			Node->Link = Store->Index->FreeNode;
+			Node->Link = Store->Header->FreeNode;
 		} else {
-			Store->Index->Entries[Index].Link = Store->Index->FreeNode;
+			Store->Header->Entries[Index].Link = Store->Header->FreeNode;
 		}
-		data_t *Node = Store->DataMap + Store->Index->FreeNode * NodeSize;
+		data_t *Node = Store->Data + Store->Header->FreeNode * NodeSize;
 		while (Length > NodeSize) {
 			memcpy(Node->Chars, Buffer, NodeSize - 4);
 			Buffer += NodeSize - 4;
 			Length -= NodeSize - 4;
-			Node = Store->DataMap + Node->Link * NodeSize;
+			Node = Store->Data + Node->Link * NodeSize;
 		}
-		Store->Index->FreeNode = Node->Link;
+		Store->Header->FreeNode = Node->Link;
 		memcpy(Node, Buffer, Length);
 	} else {
-		data_t *Node = Store->DataMap + Store->Index->Entries[Index].Link * NodeSize;
+		data_t *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
 		while (Length > NodeSize) {
 			memcpy(Node->Chars, Buffer, NodeSize - 4);
 			Buffer += NodeSize - 4;
 			Length -= NodeSize - 4;
-			Node = Store->DataMap + Node->Link * NodeSize;
+			Node = Store->Data + Node->Link * NodeSize;
 		}
 		memcpy(Node, Buffer, Length);
 	}
-	msync(Store->IndexMap, Store->IndexMapSize, MS_ASYNC);
-	msync(Store->DataMap, Store->DataMapSize, MS_ASYNC);
+	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+	msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
 }

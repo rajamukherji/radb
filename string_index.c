@@ -14,6 +14,8 @@
 #define new(T) ((T *)malloc(sizeof(T)))
 #endif
 
+#define CHUNK_SIZE 512
+
 typedef struct hash_t {
 	uint32_t Hash;
 	uint32_t Link;
@@ -36,23 +38,34 @@ struct string_index_t {
 };
 
 string_index_t *string_index_create(const char *Prefix) {
+	string_index_t *Index = new(string_index_t);
+#ifndef NO_GC
+	Index->Prefix = strdup(Prefix);
+#else
+	Index->Prefix = GC_strdup(Prefix);
+#endif
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.keys", Prefix);
-	int Fd = open(FileName, O_RDWR | O_CREAT, 0777);
-	header_t Header = {0, 8, 8, 512, 0, 0, 0, 0};
-	write(Fd, &Header, sizeof(header_t));
-	ftruncate(Fd, sizeof(header_t) + 8 * sizeof(uint32_t));
-	close(Fd);
+	Index->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Index->HeaderSize = sizeof(header_t) + 8 * sizeof(uint32_t);
+	ftruncate(Index->HeaderFd, Index->HeaderSize);
+	Index->Header = mmap(NULL, Index->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Index->HeaderFd, 0);
+	Index->Header->NumKeys = 0;
+	Index->Header->KeysSize = Index->Header->HashSize = 8;
+	Index->Header->StringsSize = CHUNK_SIZE;
+	Index->Header->StringsEnd = 0;
 	sprintf(FileName, "%s.hashes", Prefix);
-	Fd = open(FileName, O_RDWR | O_CREAT, 0777);
-	hash_t Hash = {0, INVALID_INDEX};
-	for (int I = 0; I < 8; ++I) write(Fd, &Hash, sizeof(Hash));
-	close(Fd);
+	Index->HashesFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	ftruncate(Index->HashesFd, Index->Header->HashSize * sizeof(hash_t));
+	Index->Hashes = mmap(NULL, Index->Header->HashSize * sizeof(hash_t), PROT_READ | PROT_WRITE, MAP_SHARED, Index->HashesFd, 0);
+	for (int I = 0; I < 8; ++I) Index->Hashes[I].Link = INVALID_INDEX;
 	sprintf(FileName, "%s.strings", Prefix);
-	Fd = open(FileName, O_RDWR | O_CREAT, 0777);
-	ftruncate(Fd, 512);
-	close(Fd);
-	return string_index_open(Prefix);
+	Index->StringsFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	ftruncate(Index->StringsFd, Index->Header->StringsSize);
+	Index->Strings = mmap(NULL, Index->Header->StringsSize, PROT_READ | PROT_WRITE, MAP_SHARED, Index->StringsFd, 0);
+	msync(Index->Header, Index->HeaderSize, MS_ASYNC);
+	msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
+	return Index;
 }
 
 string_index_t *string_index_open(const char *Prefix) {
@@ -165,7 +178,7 @@ uint32_t Hash = hash(Key);
 			size_t KeySize = strlen(Key) + 1;
 			if (Offset + KeySize > Store->Header->StringsSize) {
 				msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
-				uint32_t StringsSize = Store->Header->StringsSize + 512;
+				uint32_t StringsSize = Store->Header->StringsSize + CHUNK_SIZE;
 				ftruncate(Store->StringsFd, StringsSize);
 				Store->Strings = mremap(Store->Strings, Store->Header->StringsSize, StringsSize, MREMAP_MAYMOVE);
 				Store->Header->StringsSize = StringsSize;
@@ -202,6 +215,7 @@ uint32_t Hash = hash(Key);
 					}
 				}
 			}
+			msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 			return Result;
 		}
 		size_t NewSize = Store->Header->HashSize * 2;
