@@ -47,18 +47,19 @@ string_index_t *string_index_create(const char *Prefix) {
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.keys", Prefix);
 	Index->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
-	Index->HeaderSize = sizeof(header_t) + 8 * sizeof(uint32_t);
+	Index->HeaderSize = sizeof(header_t) + 120 * sizeof(uint32_t);
 	ftruncate(Index->HeaderFd, Index->HeaderSize);
 	Index->Header = mmap(NULL, Index->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Index->HeaderFd, 0);
 	Index->Header->NumKeys = 0;
-	Index->Header->KeysSize = Index->Header->HashSize = 8;
+	Index->Header->KeysSize = 120;
+	Index->Header->HashSize = 64;
 	Index->Header->StringsSize = CHUNK_SIZE;
 	Index->Header->StringsEnd = 0;
 	sprintf(FileName, "%s.hashes", Prefix);
 	Index->HashesFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	ftruncate(Index->HashesFd, Index->Header->HashSize * sizeof(hash_t));
 	Index->Hashes = mmap(NULL, Index->Header->HashSize * sizeof(hash_t), PROT_READ | PROT_WRITE, MAP_SHARED, Index->HashesFd, 0);
-	for (int I = 0; I < 8; ++I) Index->Hashes[I].Link = INVALID_INDEX;
+	for (int I = 0; I < Index->Header->HashSize; ++I) Index->Hashes[I].Link = INVALID_INDEX;
 	sprintf(FileName, "%s.strings", Prefix);
 	Index->StringsFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	ftruncate(Index->StringsFd, Index->Header->StringsSize);
@@ -91,8 +92,16 @@ string_index_t *string_index_open(const char *Prefix) {
 	return Index;
 }
 
-void string_index_close(string_index_t *Index) {
-
+void string_index_close(string_index_t *Store) {
+	msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
+	msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	munmap(Store->Strings, Store->Header->StringsSize);
+	munmap(Store->Hashes, Store->Header->HashSize * sizeof(hash_t));
+	munmap(Store->Header, Store->HeaderSize);
+	close(Store->StringsFd);
+	close(Store->HashesFd);
+	close(Store->HeaderFd);
 }
 
 #define hash(KEY) ({ \
@@ -167,10 +176,10 @@ uint32_t Hash = hash(Key);
 
 			if (Result >= Store->Header->KeysSize) {
 				msync(Store->Header, Store->HeaderSize, MS_SYNC);
-				uint32_t HeaderSize = Store->HeaderSize + 8 * sizeof(uint32_t);
+				uint32_t HeaderSize = Store->HeaderSize + 128 * sizeof(uint32_t);
 				ftruncate(Store->HeaderFd, HeaderSize);
 				Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
-				Store->Header->KeysSize += 8;
+				Store->Header->KeysSize += 128;
 				Store->HeaderSize = HeaderSize;
 			}
 			Store->Header->Keys[Result] = Offset;

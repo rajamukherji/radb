@@ -162,8 +162,8 @@ int main(int Argc, const char *Argv[]) {
 	ml_method_by_name("set", 0, ml_string_store_set, StringStoreT, MLIntegerT, MLStringT, NULL);
 
 	StringIndexT = ml_type(MLAnyT, "string-index");
-	stringmap_insert(Globals, "string_index_open", ml_function(0, ml_string_index_open));
-	stringmap_insert(Globals, "string_index_create", ml_function(0, ml_string_index_create));
+	stringmap_insert(Globals, "index_open", ml_function(0, ml_string_index_open));
+	stringmap_insert(Globals, "index_create", ml_function(0, ml_string_index_create));
 	ml_method_by_name("insert", 0, ml_string_index_insert, StringIndexT, MLStringT, NULL);
 	ml_method_by_name("search", 0, ml_string_index_search, StringIndexT, MLStringT, NULL);
 

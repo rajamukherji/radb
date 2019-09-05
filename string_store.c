@@ -101,7 +101,12 @@ string_store_t *string_store_open(const char *Prefix) {
 }
 
 void string_store_close(string_store_t *Store) {
-
+	msync(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize, MS_SYNC);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	munmap(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize);
+	munmap(Store->Header, Store->HeaderSize);
+	close(Store->DataFd);
+	close(Store->HeaderFd);
 }
 
 void string_store_reserve(string_store_t *Store, size_t Index) {
