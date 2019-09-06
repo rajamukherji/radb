@@ -14,8 +14,6 @@
 #define new(T) ((T *)malloc(sizeof(T)))
 #endif
 
-#define CHUNK_SIZE 512
-
 typedef struct entry_t {
 	uint32_t Link, Length;
 } entry_t;
@@ -26,10 +24,9 @@ typedef struct data_t {
 } data_t;
 
 typedef struct header_t {
-	uint32_t NodeSize;
+	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumFreeEntries, FreeEntry;
 	uint32_t NumNodes, NumFreeNodes, FreeNode;
-	uint32_t Reserved;
 	entry_t Entries[];
 } header_t;
 
@@ -41,11 +38,12 @@ struct string_store_t {
 	int HeaderFd, DataFd;
 };
 
-string_store_t *string_store_create(const char *Prefix, size_t RequestedSize) {
+string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize) {
 	uint32_t NodeSize = 16;
 	while (NodeSize < RequestedSize) NodeSize *= 2;
-	int NumEntries = (CHUNK_SIZE - sizeof(header_t)) / sizeof(entry_t);
-	int NumNodes = CHUNK_SIZE / NodeSize;
+	if (!ChunkSize) ChunkSize = 512;
+	int NumEntries = (512 - sizeof(header_t)) / sizeof(entry_t);
+	int NumNodes = ChunkSize / NodeSize;
 	string_store_t *Store = new(string_store_t);
 #ifndef NO_GC
 	Store->Prefix = strdup(Prefix);
@@ -59,6 +57,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize) {
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	Store->Header->NodeSize = NodeSize;
+	Store->Header->ChunkSize = ChunkSize;
 	Store->Header->NumEntries = Store->Header->NumFreeEntries = NumEntries;
 	Store->Header->FreeEntry = 0;
 	Store->Header->NumNodes = NumNodes;
@@ -116,7 +115,7 @@ void string_store_reserve(string_store_t *Store, size_t Index) {
 size_t string_store_alloc(string_store_t *Store) {
 	size_t Index;
 	if (!Store->Header->NumFreeEntries) {
-		int NumEntries = CHUNK_SIZE / sizeof(entry_t);
+		int NumEntries = 512 / sizeof(entry_t);
 		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
 		msync(Store->Header, Store->HeaderSize, MS_SYNC);
 		ftruncate(Store->HeaderFd, HeaderSize);
@@ -199,8 +198,8 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 		size_t NumRequired = NewNumBlocks - OldNumBlocks;
 		size_t NumFree = Store->Header->NumFreeNodes;
 		if (NumRequired > NumFree) {
-			int Shortfall = CHUNK_SIZE / NodeSize;
-			while (Shortfall < NumRequired - NumFree) Shortfall += CHUNK_SIZE / NodeSize;
+			int Shortfall = Store->Header->ChunkSize / NodeSize;
+			while (Shortfall < NumRequired - NumFree) Shortfall += Store->Header->ChunkSize / NodeSize;
 			size_t HeaderSize = (Store->Header->NumNodes + Shortfall) * NodeSize;
 			msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
 			ftruncate(Store->DataFd, HeaderSize);

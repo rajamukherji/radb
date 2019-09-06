@@ -14,8 +14,6 @@
 #define new(T) ((T *)malloc(sizeof(T)))
 #endif
 
-#define CHUNK_SIZE 512
-
 typedef struct hash_t {
 	uint32_t Hash;
 	uint32_t Link;
@@ -24,7 +22,7 @@ typedef struct hash_t {
 typedef struct header_t {
 	uint32_t NumKeys, KeysSize, HashSize;
 	uint32_t StringsSize, StringsEnd;
-	uint32_t Reserved1, Reserved2, Reserved3;
+	uint32_t ChunkSize, Reserved2, Reserved3;
 	uint32_t Keys[];
 } header_t;
 
@@ -37,7 +35,8 @@ struct string_index_t {
 	int HeaderFd, HashesFd, StringsFd;
 };
 
-string_index_t *string_index_create(const char *Prefix) {
+string_index_t *string_index_create(const char *Prefix, size_t ChunkSize) {
+	if (!ChunkSize) ChunkSize = 512;
 	string_index_t *Index = new(string_index_t);
 #ifndef NO_GC
 	Index->Prefix = strdup(Prefix);
@@ -50,10 +49,11 @@ string_index_t *string_index_create(const char *Prefix) {
 	Index->HeaderSize = sizeof(header_t) + 120 * sizeof(uint32_t);
 	ftruncate(Index->HeaderFd, Index->HeaderSize);
 	Index->Header = mmap(NULL, Index->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Index->HeaderFd, 0);
+	Index->Header->ChunkSize = ChunkSize;
 	Index->Header->NumKeys = 0;
 	Index->Header->KeysSize = 120;
 	Index->Header->HashSize = 64;
-	Index->Header->StringsSize = CHUNK_SIZE;
+	Index->Header->StringsSize = ChunkSize;
 	Index->Header->StringsEnd = 0;
 	sprintf(FileName, "%s.hashes", Prefix);
 	Index->HashesFd = open(FileName, O_RDWR | O_CREAT, 0777);
@@ -187,13 +187,13 @@ uint32_t Hash = hash(Key);
 			size_t KeySize = strlen(Key) + 1;
 			if (Offset + KeySize > Store->Header->StringsSize) {
 				msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
-				uint32_t StringsSize = Store->Header->StringsSize + CHUNK_SIZE;
+				uint32_t StringsSize = Store->Header->StringsSize + Store->Header->ChunkSize;
 				ftruncate(Store->StringsFd, StringsSize);
 				Store->Strings = mremap(Store->Strings, Store->Header->StringsSize, StringsSize, MREMAP_MAYMOVE);
 				Store->Header->StringsSize = StringsSize;
 			}
 			strcpy(Store->Strings + Offset, Key);
-			Store->Header->StringsEnd = Offset + KeySize + 1;
+			Store->Header->StringsEnd = Offset + KeySize;
 			msync(Store->Strings, Store->Header->StringsSize, MS_ASYNC);
 
 			hash_t Old = Hashes[Index];

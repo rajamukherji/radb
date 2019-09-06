@@ -7,7 +7,7 @@
 
 typedef struct string_store_t string_store_t;
 
-string_store_t *string_store_create(const char *Prefix, size_t RequestedSize);
+string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize);
 string_store_t *string_store_open(const char *Prefix);
 void string_store_close(string_store_t *Store);
 

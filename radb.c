@@ -71,9 +71,14 @@ static ml_value_t *ml_string_store_create(void *Data, int Count, ml_value_t **Ar
 	ML_CHECK_ARG_COUNT(2);
 	ML_CHECK_ARG_TYPE(0, MLStringT);
 	ML_CHECK_ARG_TYPE(1, MLIntegerT);
+	size_t ChunkSize = 0;
+	if (Count > 2) {
+		ML_CHECK_ARG_TYPE(2, MLIntegerT);
+		ChunkSize = ml_integer_value(Args[2]);
+	}
 	ml_string_store_t *Store = new(ml_string_store_t);
 	Store->Type = StringStoreT;
-	Store->Handle = string_store_create(ml_string_value(Args[0]), ml_integer_value(Args[1]));
+	Store->Handle = string_store_create(ml_string_value(Args[0]), ml_integer_value(Args[1]), ChunkSize);
 	return (ml_value_t *)Store;
 }
 
@@ -126,9 +131,14 @@ static ml_value_t *ml_string_index_open(void *Data, int Count, ml_value_t **Args
 static ml_value_t *ml_string_index_create(void *Data, int Count, ml_value_t **Args) {
 	ML_CHECK_ARG_COUNT(1);
 	ML_CHECK_ARG_TYPE(0, MLStringT);
+	size_t ChunkSize = 0;
+	if (Count > 1) {
+		ML_CHECK_ARG_TYPE(2, MLIntegerT);
+		ChunkSize = ml_integer_value(Args[1]);
+	}
 	ml_string_index_t *Store = new(ml_string_index_t);
 	Store->Type = StringIndexT;
-	Store->Handle = string_index_create(ml_string_value(Args[0]));
+	Store->Handle = string_index_create(ml_string_value(Args[0]), ChunkSize);
 	return (ml_value_t *)Store;
 }
 
