@@ -74,8 +74,8 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	for (int I = 0; I < NumNodes; ++I) {
 		((data_t *)(Store->Data + I * NodeSize))->Link = I + 1;
 	}
-	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
-	msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
+	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
 	return Store;
 }
 
@@ -135,7 +135,7 @@ size_t string_store_alloc(string_store_t *Store) {
 	--Store->Header->NumFreeEntries;
 	Store->Header->Entries[Index].Link = INVALID_INDEX;
 	Store->Header->Entries[Index].Length = 0;
-	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	return Index;
 }
 
@@ -249,6 +249,6 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 		}
 		memcpy(Node, Buffer, Length);
 	}
-	msync(Store->Header, Store->HeaderSize, MS_ASYNC);
-	msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
+	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
 }

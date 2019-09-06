@@ -33,6 +33,7 @@ struct string_index_t {
 	char *Strings;
 	size_t HeaderSize;
 	int HeaderFd, HashesFd, StringsFd;
+	int SyncCounter;
 };
 
 string_index_t *string_index_create(const char *Prefix, size_t ChunkSize) {
@@ -55,6 +56,7 @@ string_index_t *string_index_create(const char *Prefix, size_t ChunkSize) {
 	Index->Header->HashSize = 64;
 	Index->Header->StringsSize = ChunkSize;
 	Index->Header->StringsEnd = 0;
+	Index->SyncCounter = 32;
 	sprintf(FileName, "%s.hashes", Prefix);
 	Index->HashesFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	ftruncate(Index->HashesFd, Index->Header->HashSize * sizeof(hash_t));
@@ -64,8 +66,8 @@ string_index_t *string_index_create(const char *Prefix, size_t ChunkSize) {
 	Index->StringsFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	ftruncate(Index->StringsFd, Index->Header->StringsSize);
 	Index->Strings = mmap(NULL, Index->Header->StringsSize, PROT_READ | PROT_WRITE, MAP_SHARED, Index->StringsFd, 0);
-	msync(Index->Header, Index->HeaderSize, MS_ASYNC);
-	msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
+	//msync(Index->Header, Index->HeaderSize, MS_ASYNC);
+	//msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 	return Index;
 }
 
@@ -194,7 +196,7 @@ uint32_t Hash = hash(Key);
 			}
 			strcpy(Store->Strings + Offset, Key);
 			Store->Header->StringsEnd = Offset + KeySize;
-			msync(Store->Strings, Store->Header->StringsSize, MS_ASYNC);
+			//msync(Store->Strings, Store->Header->StringsSize, MS_ASYNC);
 
 			hash_t Old = Hashes[Index];
 			Hashes[Index].Link = Result;
@@ -206,7 +208,7 @@ uint32_t Hash = hash(Key);
 					Index &= Mask;
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
-						msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
+						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 						return Result;
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
@@ -224,7 +226,7 @@ uint32_t Hash = hash(Key);
 					}
 				}
 			}
-			msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
+			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 			return Result;
 		}
 		size_t NewSize = Store->Header->HashSize * 2;
@@ -262,7 +264,7 @@ uint32_t Hash = hash(Key);
 		Store->HashesFd = HashesFd;
 		Store->Header->HashSize = NewSize;
 
-		msync(Store->Header, Store->HeaderSize, MS_ASYNC);
+		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
 	return INVALID_INDEX;
 }
