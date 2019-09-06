@@ -100,8 +100,8 @@ string_store_t *string_store_open(const char *Prefix) {
 }
 
 void string_store_close(string_store_t *Store) {
-	msync(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize, MS_SYNC);
-	msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	//msync(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize, MS_SYNC);
+	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->DataFd);
@@ -117,7 +117,7 @@ size_t string_store_alloc(string_store_t *Store) {
 	if (!Store->Header->NumFreeEntries) {
 		int NumEntries = 512 / sizeof(entry_t);
 		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
-		msync(Store->Header, Store->HeaderSize, MS_SYNC);
+		//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 		ftruncate(Store->HeaderFd, HeaderSize);
 		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
 		entry_t *Entries = Store->Header->Entries;
@@ -201,7 +201,7 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 			int Shortfall = Store->Header->ChunkSize / NodeSize;
 			while (Shortfall < NumRequired - NumFree) Shortfall += Store->Header->ChunkSize / NodeSize;
 			size_t HeaderSize = (Store->Header->NumNodes + Shortfall) * NodeSize;
-			msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
+			//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
 			ftruncate(Store->DataFd, HeaderSize);
 			Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
 			uint32_t FreeEnd;

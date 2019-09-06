@@ -95,9 +95,9 @@ string_index_t *string_index_open(const char *Prefix) {
 }
 
 void string_index_close(string_index_t *Store) {
-	msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
-	msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
-	msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
+	//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
+	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Strings, Store->Header->StringsSize);
 	munmap(Store->Hashes, Store->Header->HashSize * sizeof(hash_t));
 	munmap(Store->Header, Store->HeaderSize);
@@ -177,7 +177,7 @@ uint32_t Hash = hash(Key);
 			uint32_t Offset = Store->Header->StringsEnd;
 
 			if (Result >= Store->Header->KeysSize) {
-				msync(Store->Header, Store->HeaderSize, MS_SYNC);
+				//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 				uint32_t HeaderSize = Store->HeaderSize + 128 * sizeof(uint32_t);
 				ftruncate(Store->HeaderFd, HeaderSize);
 				Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
@@ -188,7 +188,7 @@ uint32_t Hash = hash(Key);
 
 			size_t KeySize = strlen(Key) + 1;
 			if (Offset + KeySize > Store->Header->StringsSize) {
-				msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
+				//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
 				uint32_t StringsSize = Store->Header->StringsSize + Store->Header->ChunkSize;
 				ftruncate(Store->StringsFd, StringsSize);
 				Store->Strings = mremap(Store->Strings, Store->Header->StringsSize, StringsSize, MREMAP_MAYMOVE);
