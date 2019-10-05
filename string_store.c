@@ -18,11 +18,6 @@ typedef struct entry_t {
 	uint32_t Link, Length;
 } entry_t;
 
-typedef struct data_t {
-	uint32_t Link;
-	char Chars[];
-} data_t;
-
 typedef struct header_t {
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;
@@ -38,8 +33,10 @@ struct string_store_t {
 	int HeaderFd, DataFd;
 };
 
+#define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
+
 string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize) {
-	uint32_t NodeSize = 16;
+	size_t NodeSize = 8;
 	while (NodeSize < RequestedSize) NodeSize *= 2;
 	if (!ChunkSize) ChunkSize = 512;
 	int NumEntries = (512 - sizeof(header_t)) / sizeof(entry_t);
@@ -70,8 +67,8 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	Store->DataFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	ftruncate(Store->DataFd, NumNodes * NodeSize);
 	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
-	for (int I = 0; I < NumNodes; ++I) {
-		((data_t *)(Store->Data + I * NodeSize))->Link = I + 1;
+	for (int I = 1; I <= NumNodes; ++I) {
+		*(uint32_t *)(Store->Data + I * NodeSize - 4) = I;
 	}
 	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
@@ -115,14 +112,14 @@ size_t string_store_get_size(string_store_t *Store, size_t Index) {
 void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer) {
 	if (Index >= Store->Header->NumEntries) return;
 	size_t Length = Store->Header->Entries[Index].Length;
-	uint32_t Link = Store->Header->Entries[Index].Link;
-	uint32_t NodeSize = Store->Header->NodeSize;
-	data_t *Node = Store->Data + Link * NodeSize;
+	size_t Link = Store->Header->Entries[Index].Link;
+	size_t NodeSize = Store->Header->NodeSize;
+	void *Node = Store->Data + Link * NodeSize;
 	while (Length > NodeSize) {
-		memcpy(Buffer, Node->Chars, NodeSize - 4);
+		memcpy(Buffer, Node, NodeSize - 4);
 		Buffer += NodeSize - 4;
 		Length -= NodeSize - 4;
-		Node = Store->Data + Node->Link * NodeSize;
+		Node = Store->Data + NodeSize * NODE_LINK(Node);
 	}
 	memcpy(Buffer, Node, Length);
 }
@@ -147,27 +144,27 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 	size_t OldLength = Store->Header->Entries[Index].Length;
 	if (OldLength == INVALID_INDEX) return;
 	Store->Header->Entries[Index].Length = Length;
-	uint32_t NodeSize = Store->Header->NodeSize;
+	size_t NodeSize = Store->Header->NodeSize;
 	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
 	size_t NewNumBlocks = (Length > NodeSize) ? 1 + (Length - 5) / (NodeSize - 4) : (Length != 0);
 	if (OldNumBlocks > NewNumBlocks) {
-		uint32_t FreeStart = Store->Header->Entries[Index].Link;
+		size_t FreeStart = Store->Header->Entries[Index].Link;
 		if (NewNumBlocks) {
-			data_t *Node = Store->Data + FreeStart * NodeSize;
+			void *Node = Store->Data + FreeStart * NodeSize;
 			while (Length > NodeSize) {
-				memcpy(Node->Chars, Buffer, NodeSize - 4);
+				memcpy(Node, Buffer, NodeSize - 4);
 				Buffer += NodeSize - 4;
 				Length -= NodeSize - 4;
-				Node = Store->Data + Node->Link * NodeSize;
+				Node = Store->Data + NodeSize * NODE_LINK(Node);
 			}
-			FreeStart = Node->Link;
+			FreeStart = NODE_LINK(Node);
 			memcpy(Node, Buffer, Length);
 		}
-		data_t *FreeEnd = Store->Data + FreeStart * NodeSize;
+		void *FreeEnd = Store->Data + FreeStart * NodeSize;
 		size_t NumFree = OldNumBlocks - NewNumBlocks;
 		Store->Header->NumFreeNodes += NumFree;
-		for (int I = NumFree; --I > 0;) FreeEnd = Store->Data + FreeEnd->Link * NodeSize;
-		FreeEnd->Link = Store->Header->FreeNode;
+		for (int I = NumFree; --I > 0;) FreeEnd = Store->Data + NodeSize * NODE_LINK(FreeEnd);
+		NODE_LINK(FreeEnd) = Store->Header->FreeNode;
 		Store->Header->FreeNode = FreeStart;
 	} else if (OldNumBlocks < NewNumBlocks) {
 		size_t NumRequired = NewNumBlocks - OldNumBlocks;
@@ -181,51 +178,203 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 			//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
 			ftruncate(Store->DataFd, HeaderSize);
 			Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
-			uint32_t FreeEnd;
+			size_t FreeEnd;
 			if (NumFree > 0) {
 				FreeEnd = Store->Header->FreeNode;
-				for (int I = NumFree; --I > 0;) FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link;
-				FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link = Store->Header->NumNodes;
+				for (int I = NumFree; --I > 0;) FreeEnd = NODE_LINK(Store->Data + FreeEnd * NodeSize);
+				FreeEnd = NODE_LINK(Store->Data + FreeEnd * NodeSize) = Store->Header->NumNodes;
 			} else {
 				FreeEnd = Store->Header->FreeNode = Store->Header->NumNodes;
 			}
 			Store->Header->NumNodes += NumNodes;
 			Store->Header->NumFreeNodes += NumNodes - NumRequired;
-			while (--NumNodes > 0) FreeEnd = ((data_t *)(Store->Data + FreeEnd * NodeSize))->Link = FreeEnd + 1;
+			while (--NumNodes > 0) FreeEnd = NODE_LINK(Store->Data + FreeEnd * NodeSize) = FreeEnd + 1;
 		} else {
 			Store->Header->NumFreeNodes -= NumRequired;
 		}
 		if (OldNumBlocks) {
-			data_t *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
+			void *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
 			for (int I = OldNumBlocks; --I > 0;) {
-				memcpy(Node->Chars, Buffer, NodeSize - 4);
+				memcpy(Node, Buffer, NodeSize - 4);
 				Buffer += NodeSize - 4;
 				Length -= NodeSize - 4;
-				Node = Store->Data + Node->Link * NodeSize;
+				Node = Store->Data + NodeSize * NODE_LINK(Node);
 			}
-			Node->Link = Store->Header->FreeNode;
+			memcpy(Node, Buffer, NodeSize - 4);
+			Buffer += NodeSize - 4;
+			Length -= NodeSize - 4;
+			NODE_LINK(Node) = Store->Header->FreeNode;
 		} else {
 			Store->Header->Entries[Index].Link = Store->Header->FreeNode;
 		}
-		data_t *Node = Store->Data + Store->Header->FreeNode * NodeSize;
+		void *Node = Store->Data + Store->Header->FreeNode * NodeSize;
 		while (Length > NodeSize) {
-			memcpy(Node->Chars, Buffer, NodeSize - 4);
+			memcpy(Node, Buffer, NodeSize - 4);
 			Buffer += NodeSize - 4;
 			Length -= NodeSize - 4;
-			Node = Store->Data + Node->Link * NodeSize;
+			Node = Store->Data + NodeSize * NODE_LINK(Node);
 		}
-		Store->Header->FreeNode = Node->Link;
+		Store->Header->FreeNode = NODE_LINK(Node);
 		memcpy(Node, Buffer, Length);
 	} else {
-		data_t *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
+		void *Node = Store->Data + Store->Header->Entries[Index].Link * NodeSize;
 		while (Length > NodeSize) {
-			memcpy(Node->Chars, Buffer, NodeSize - 4);
+			memcpy(Node, Buffer, NodeSize - 4);
 			Buffer += NodeSize - 4;
 			Length -= NodeSize - 4;
-			Node = Store->Data + Node->Link * NodeSize;
+			Node = Store->Data + NodeSize * NODE_LINK(Node);
 		}
 		memcpy(Node, Buffer, Length);
 	}
 	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
+}
+
+void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Store, size_t Index) {
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += 512 - 1;
+		NumEntries /= 512;
+		NumEntries *= 512;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		ftruncate(Store->HeaderFd, HeaderSize);
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = INVALID_INDEX;
+			Entries[I].Length = 0;
+		}
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	size_t OldLength = Store->Header->Entries[Index].Length;
+	if (OldLength == INVALID_INDEX) return;
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
+	if (OldNumBlocks > 0) {
+		size_t FreeStart = Store->Header->Entries[Index].Link;
+		void *FreeEnd = Store->Data + FreeStart * NodeSize;
+		Store->Header->NumFreeNodes += OldNumBlocks;
+		for (int I = OldNumBlocks; --I > 0;) FreeEnd = Store->Data + NodeSize * NODE_LINK(FreeEnd);
+		NODE_LINK(FreeEnd) = Store->Header->FreeNode;
+		Store->Header->FreeNode = FreeStart;
+	}
+	Writer->Store = Store;
+	Writer->Node = 0;
+	Writer->Index = Index;
+	Store->Header->Entries[Index].Length = 0;
+	Store->Header->Entries[Index].Link = INVALID_INDEX;
+}
+
+static inline size_t string_store_node_alloc(string_store_t *Store, size_t NodeSize) {
+	if (!Store->Header->NumFreeNodes) {
+		size_t NumNodes = Store->Header->ChunkSize;
+		size_t HeaderSize = (Store->Header->NumNodes + NumNodes) * NodeSize;
+		//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
+		ftruncate(Store->DataFd, HeaderSize);
+		Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
+		size_t Index = Store->Header->NumNodes;
+		size_t FreeEnd = Store->Header->FreeNode = Store->Header->NumNodes + 1;
+		Store->Header->NumNodes += NumNodes;
+		Store->Header->NumFreeNodes += --NumNodes ;
+		while (--NumNodes > 0) FreeEnd = NODE_LINK(Store->Data + FreeEnd * NodeSize) = FreeEnd + 1;
+		return Index;
+	} else {
+		--Store->Header->NumFreeNodes;
+		size_t Index = Store->Header->FreeNode;
+		Store->Header->FreeNode = NODE_LINK(Store->Data + NodeSize * Index);
+		return Index;
+	}
+}
+
+size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buffer, size_t Length) {
+	if (Length == 0) return Length;
+	string_store_t *Store = Writer->Store;
+	Store->Header->Entries[Writer->Index].Length += Length;
+	size_t NodeSize = Store->Header->NodeSize;
+	void *Node = Writer->Node;
+	size_t Offset, Remain;
+	if (!Node) {
+		size_t Index = string_store_node_alloc(Store, NodeSize);
+		Store->Header->Entries[Writer->Index].Link = Index;
+		Node = Store->Data + NodeSize * Index;
+		Remain = NodeSize;
+		Offset = 0;
+	} else {
+		Remain = Writer->Remain;
+		Offset = NodeSize - Remain;
+	}
+	if (Remain < 4) {
+		uint32_t Save = NODE_LINK(Node);
+		size_t Index = string_store_node_alloc(Store, NodeSize);
+		NODE_LINK(Node) = Index;
+		Node = Store->Data + NodeSize * Index;
+		*(uint32_t *)Node = Save;
+		Offset = 4 - Remain;
+		Remain += NodeSize - 4;
+	}
+	while (Length > Remain) {
+		memcpy(Node + Offset, Buffer, Remain - 4);
+		Buffer += Remain - 4;
+		Length -= Remain - 4;
+		size_t Index = string_store_node_alloc(Store, NodeSize);
+		NODE_LINK(Node) = Index;
+		Node = Store->Data + NodeSize * Index;
+		Offset = 0;
+		Remain = NodeSize - 4;
+	}
+	memcpy(Node + Offset, Buffer, Length);
+	Writer->Node = Node;
+	Writer->Remain = Remain - Length;
+	return Store->Header->Entries[Writer->Index].Length;
+}
+
+void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Store, size_t Index) {
+	Reader->Store = Store;
+	Reader->Node = Store->Data + Store->Header->NodeSize * Store->Header->Entries[Index].Link;
+	Reader->Offset = 0;
+	Reader->Remain = Store->Header->Entries[Index].Length;
+}
+
+size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, size_t Length) {
+	string_store_t *Store = Reader->Store;
+	size_t NodeSize = Store->Header->NodeSize;
+	void *Node = Reader->Node;
+	if (!Node) return 0;
+	size_t Offset = Reader->Offset;
+	size_t Remain = Reader->Remain;
+	size_t Copied = 0;
+	for (;;) {
+		if (Offset + Remain <= NodeSize) {
+			// Last node
+			if (Length < Remain) {
+				memcpy(Buffer, Node + Offset, Length);
+				Reader->Node = Node;
+				Reader->Offset = Offset + Length;
+				Reader->Remain = Remain - Length;
+				return Copied + Length;
+			} else {
+				memcpy(Buffer, Node + Offset, Remain);
+				Reader->Node = 0;
+				return Copied + Remain;
+			}
+		} else {
+			size_t Available = NodeSize - Offset - 4;
+			if (Length < Available) {
+				memcpy(Buffer, Node + Offset, Length);
+				Reader->Node = Node;
+				Reader->Offset = Offset + Length;
+				Reader->Remain = Remain - Length;
+				return Copied + Length;
+			} else {
+				memcpy(Buffer, Node + Offset, Available);
+				Node = Store->Data + NodeSize * NODE_LINK(Node);
+				Offset = 0;
+				Remain -= Available;
+				Copied += Available;
+				Buffer += Available;
+				Length -= Available;
+			}
+		}
+	}
 }

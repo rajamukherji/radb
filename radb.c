@@ -55,7 +55,19 @@ typedef struct ml_string_store_t {
 	string_store_t *Handle;
 } ml_string_store_t;
 
+typedef struct ml_string_store_writer_t {
+	const ml_type_t *Type;
+	string_store_writer_t Handle[1];
+} ml_string_store_writer_t;
+
+typedef struct ml_string_store_reader_t {
+	const ml_type_t *Type;
+	string_store_reader_t Handle[1];
+} ml_string_store_reader_t;
+
 static ml_type_t *StringStoreT;
+static ml_type_t *StringStoreWriterT;
+static ml_type_t *StringStoreReaderT;
 
 static ml_value_t *ml_string_store_open(void *Data, int Count, ml_value_t **Args) {
 	ML_CHECK_ARG_COUNT(1);
@@ -98,6 +110,36 @@ static ml_value_t *ml_string_store_set(void *Data, int Count, ml_value_t **Args)
 	size_t Index = ml_integer_value(Args[1]);
 	string_store_set(Store->Handle, Index, ml_string_value(Args[2]), ml_string_length(Args[2]));
 	return Args[2];
+}
+
+static ml_value_t *ml_string_store_writer_open(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
+	ml_string_store_writer_t *Writer = new(ml_string_store_writer_t);
+	Writer->Type = StringStoreWriterT;
+	string_store_writer_open(Writer->Handle, Store->Handle, ml_integer_value(Args[1]));
+	return (ml_value_t *)Writer;
+}
+
+static ml_value_t *ml_string_store_writer_write(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_writer_t *Writer = (ml_string_store_writer_t *)Args[0];
+	size_t Total = string_store_writer_write(Writer->Handle, ml_string_value(Args[1]), ml_string_length(Args[1]));
+	return ml_integer(Total);
+}
+
+static ml_value_t *ml_string_store_reader_open(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
+	ml_string_store_reader_t *Reader = new(ml_string_store_reader_t);
+	Reader->Type = StringStoreReaderT;
+	string_store_reader_open(Reader->Handle, Store->Handle, ml_integer_value(Args[1]));
+	return (ml_value_t *)Reader;
+}
+
+static ml_value_t *ml_string_store_reader_read(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_reader_t *Reader = (ml_string_store_reader_t *)Args[0];
+	size_t Size = ml_integer_value(Args[1]);
+	char *Buffer = GC_malloc_atomic(Size);
+	size_t Length = string_store_reader_read(Reader->Handle, Buffer, Size);
+	return ml_string(Buffer, Length);
 }
 
 typedef struct ml_string_index_t {
@@ -153,10 +195,17 @@ int main(int Argc, const char *Argv[]) {
 	stringmap_insert(Globals, "debug", ml_function(0, debug));
 
 	StringStoreT = ml_type(MLAnyT, "string-store");
+	StringStoreWriterT = ml_type(MLAnyT, "string-store-writer");
+	StringStoreReaderT = ml_type(MLAnyT, "string-store-reader");
+
 	stringmap_insert(Globals, "store_open", ml_function(0, ml_string_store_open));
 	stringmap_insert(Globals, "store_create", ml_function(0, ml_string_store_create));
 	ml_method_by_name("get", 0, ml_string_store_get, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("set", 0, ml_string_store_set, StringStoreT, MLIntegerT, MLStringT, NULL);
+	ml_method_by_name("write", 0, ml_string_store_writer_open, StringStoreT, MLIntegerT, NULL);
+	ml_method_by_name("write", 0, ml_string_store_writer_write, StringStoreWriterT, MLStringT, NULL);
+	ml_method_by_name("read", 0, ml_string_store_reader_open, StringStoreT, MLIntegerT, NULL);
+	ml_method_by_name("read", 0, ml_string_store_reader_read, StringStoreReaderT, MLIntegerT, NULL);
 
 	StringIndexT = ml_type(MLAnyT, "string-index");
 	stringmap_insert(Globals, "index_open", ml_function(0, ml_string_index_open));
