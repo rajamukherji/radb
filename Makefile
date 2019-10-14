@@ -26,6 +26,10 @@ common_objects = \
 
 platform_objects =
 
+ifeq ($(MACHINE), i686)
+	CFLAGS += "-fno-pic"
+endif
+
 ifeq ($(PLATFORM), Linux)
 	platform_objects += 
 	LDFLAGS += -lgc
