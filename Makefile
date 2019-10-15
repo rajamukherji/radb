@@ -8,7 +8,7 @@ all: libradb.a radb
 *.o: *.h
 
 CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
-	-I. -I../minilang -pthread -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
+	-I. -I../minilang -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
 LDFLAGS += -lm -L. -L../minilang
 
 ifdef DEBUG
@@ -27,7 +27,8 @@ common_objects = \
 platform_objects =
 
 ifeq ($(MACHINE), i686)
-	#CFLAGS += "-fno-pic"
+	CFLAGS += -fno-pic
+	LDFLAGS += -fno-pic
 endif
 
 ifeq ($(PLATFORM), Linux)
@@ -49,7 +50,7 @@ endif
 libradb.a: $(common_objects) $(platform_objects)
 	ar rcs $@ $(common_objects) $(platform_objects)
 
-radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a
+radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a -pthread
 	$(CC) radb.o $(LDFLAGS) -o$@ -lradb -lminilang
 
 clean:
