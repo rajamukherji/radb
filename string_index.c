@@ -189,7 +189,12 @@ uint32_t Hash = hash(Key);
 				//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 				uint32_t HeaderSize = Store->HeaderSize + 128 * sizeof(uint32_t);
 				ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
 				Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+				munmap(Store->Header, Store->HeaderSize);
+				Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
 				Store->Header->KeysSize += 128;
 				Store->HeaderSize = HeaderSize;
 			}
@@ -200,7 +205,12 @@ uint32_t Hash = hash(Key);
 				//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
 				uint32_t StringsSize = Store->Header->StringsSize + Store->Header->ChunkSize;
 				ftruncate(Store->StringsFd, StringsSize);
+#ifdef Linux
 				Store->Strings = mremap(Store->Strings, Store->Header->StringsSize, StringsSize, MREMAP_MAYMOVE);
+#else
+				munmap(Store->Strings, Store->Header->StringsSize);
+				Store->Strings = mmap(NULL, StringsSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->StringsFd, 0);
+#endif
 				Store->Header->StringsSize = StringsSize;
 			}
 			strcpy(Store->Strings + Offset, Key);

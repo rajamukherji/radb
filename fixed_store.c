@@ -81,7 +81,12 @@ void *fixed_store_get(fixed_store_t *Store, size_t Index) {
 		NumEntries *= Store->Header->ChunkSize;
 		size_t HeaderSize = Store->HeaderSize + NumEntries * Store->Header->NodeSize;
 		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
 		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
 		Store->Header->NumEntries += NumEntries;
 		Store->HeaderSize = HeaderSize;
 	}

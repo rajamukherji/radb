@@ -132,7 +132,12 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 		NumEntries *= 512;
 		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
 		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
 		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
 		entry_t *Entries = Store->Header->Entries;
 		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
 			Entries[I].Link = INVALID_INDEX;
@@ -174,10 +179,15 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 			NumNodes += Store->Header->ChunkSize - 1;
 			NumNodes /= Store->Header->ChunkSize;
 			NumNodes *= Store->Header->ChunkSize;
-			size_t HeaderSize = (Store->Header->NumNodes + NumNodes) * NodeSize;
+			size_t DataSize = (Store->Header->NumNodes + NumNodes) * NodeSize;
 			//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
-			ftruncate(Store->DataFd, HeaderSize);
-			Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
+			ftruncate(Store->DataFd, DataSize);
+#ifdef Linux
+			Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, DataSize, MREMAP_MAYMOVE);
+#else
+			munmap(Store->Data, Store->Header->NumNodes * NodeSize);
+			Store->Data = mmap(NULL, DataSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
+#endif
 			size_t FreeEnd;
 			if (NumFree > 0) {
 				FreeEnd = Store->Header->FreeNode;
@@ -238,7 +248,12 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 		NumEntries *= 512;
 		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
 		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
 		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
 		entry_t *Entries = Store->Header->Entries;
 		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
 			Entries[I].Link = INVALID_INDEX;
@@ -269,10 +284,15 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 static inline size_t string_store_node_alloc(string_store_t *Store, size_t NodeSize) {
 	if (!Store->Header->NumFreeNodes) {
 		size_t NumNodes = Store->Header->ChunkSize;
-		size_t HeaderSize = (Store->Header->NumNodes + NumNodes) * NodeSize;
+		size_t DataSize = (Store->Header->NumNodes + NumNodes) * NodeSize;
 		//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_SYNC);
-		ftruncate(Store->DataFd, HeaderSize);
-		Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, HeaderSize, MREMAP_MAYMOVE);
+		ftruncate(Store->DataFd, DataSize);
+#ifdef Linux
+		Store->Data = mremap(Store->Data, Store->Header->NumNodes * NodeSize, DataSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Data, Store->Header->NumNodes * NodeSize);
+		Store->Data = mmap(NULL, DataSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
+#endif
 		size_t Index = Store->Header->NumNodes;
 		size_t FreeEnd = Store->Header->FreeNode = Store->Header->NumNodes + 1;
 		Store->Header->NumNodes += NumNodes;
