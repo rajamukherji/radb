@@ -62,7 +62,10 @@ install_include = $(DESTDIR)$(PREFIX)/include/radb
 install_lib = $(DESTDIR)$(PREFIX)/lib
 
 install_h = \
-	$(install_include)/radb.h
+	$(install_include)/radb.h \
+	$(install_include)/string_index.h \
+	$(install_include)/string_store.h \
+	$(install_include)/fixed_store.h
 
 install_a = $(install_lib)/libradb.a
 
