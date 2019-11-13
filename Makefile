@@ -50,7 +50,7 @@ endif
 libradb.a: $(common_objects) $(platform_objects)
 	ar rcs $@ $(common_objects) $(platform_objects)
 
-radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a -pthread
+radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a
 	$(CC) radb.o $(LDFLAGS) -o$@ -lradb -lminilang
 
 clean:
