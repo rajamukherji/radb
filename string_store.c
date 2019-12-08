@@ -313,40 +313,40 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 	Store->Header->Entries[Writer->Index].Length += Length;
 	size_t NodeSize = Store->Header->NodeSize;
 	void *Node = Writer->Node;
-	size_t Offset, Remain;
+	size_t Remain = Length, Offset, Space;
 	if (!Node) {
 		size_t Index = string_store_node_alloc(Store, NodeSize);
 		Store->Header->Entries[Writer->Index].Link = Index;
 		Node = Store->Data + NodeSize * Index;
-		Remain = NodeSize;
+		Space = NodeSize;
 		Offset = 0;
 	} else {
-		Remain = Writer->Remain;
-		Offset = NodeSize - Remain;
+		Space = Writer->Remain;
+		Offset = NodeSize - Space;
 	}
-	if (Remain < 4) {
+	if (Space < 4) {
 		uint32_t Save = NODE_LINK(Node);
 		size_t Index = string_store_node_alloc(Store, NodeSize);
 		NODE_LINK(Node) = Index;
 		Node = Store->Data + NodeSize * Index;
 		*(uint32_t *)Node = Save;
-		Offset = 4 - Remain;
-		Remain += NodeSize - 4;
+		Offset = 4 - Space;
+		Space += NodeSize - 4;
 	}
-	while (Length > Remain) {
-		memcpy(Node + Offset, Buffer, Remain - 4);
-		Buffer += Remain - 4;
-		Length -= Remain - 4;
+	while (Remain > Space) {
+		memcpy(Node + Offset, Buffer, Space - 4);
+		Buffer += Space - 4;
+		Remain -= Space - 4;
 		size_t Index = string_store_node_alloc(Store, NodeSize);
 		NODE_LINK(Node) = Index;
 		Node = Store->Data + NodeSize * Index;
 		Offset = 0;
-		Remain = NodeSize - 4;
+		Space = NodeSize - 4;
 	}
-	memcpy(Node + Offset, Buffer, Length);
+	memcpy(Node + Offset, Buffer, Remain);
 	Writer->Node = Node;
-	Writer->Remain = Remain - Length;
-	return Store->Header->Entries[Writer->Index].Length;
+	Writer->Remain = Space - Remain;
+	return Length;
 }
 
 void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Store, size_t Index) {
