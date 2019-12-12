@@ -16,7 +16,7 @@
 
 typedef struct header_t {
 	uint32_t NodeSize, ChunkSize;
-	uint32_t NumEntries, Reserved;
+	uint32_t NumEntries, FreeEntry;
 	char Nodes[];
 } header_t;
 
@@ -46,6 +46,8 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	Store->Header->NodeSize = NodeSize;
 	Store->Header->ChunkSize = (ChunkSize + NodeSize - 1) / NodeSize;
 	Store->Header->NumEntries = NumEntries;
+	Store->Header->FreeEntry = 0;
+	*(uint32_t *)Store->Header->Nodes = INVALID_INDEX;
 	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	return Store;
 }
@@ -91,4 +93,36 @@ void *fixed_store_get(fixed_store_t *Store, size_t Index) {
 		Store->HeaderSize = HeaderSize;
 	}
 	return Store->Header->Nodes + Index * Store->Header->NodeSize;
+}
+
+size_t fixed_store_alloc(fixed_store_t *Store) {
+	size_t FreeEntry = Store->Header->FreeEntry;
+	size_t Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
+	if (Index == INVALID_INDEX) {
+		Index = FreeEntry + 1;
+		if (Index >= Store->Header->NumEntries) {
+			size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+			NumEntries += Store->Header->ChunkSize - 1;
+			NumEntries /= Store->Header->ChunkSize;
+			NumEntries *= Store->Header->ChunkSize;
+			size_t HeaderSize = Store->HeaderSize + NumEntries * Store->Header->NodeSize;
+			ftruncate(Store->HeaderFd, HeaderSize);
+	#ifdef Linux
+			Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+	#else
+			munmap(Store->Header, Store->HeaderSize);
+			Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	#endif
+			Store->Header->NumEntries += NumEntries;
+			Store->HeaderSize = HeaderSize;
+		}
+		*(uint32_t *)(Store->Header->Nodes + Index * Store->Header->NodeSize) = INVALID_INDEX;
+	}
+	Store->Header->FreeEntry = Index;
+	return FreeEntry;
+}
+
+void fixed_store_free(fixed_store_t *Store, size_t Index) {
+	*(uint32_t *)(Store->Header->Nodes + Index * Store->Header->NodeSize) =  Store->Header->FreeEntry;
+	Store->Header->FreeEntry = Index;
 }

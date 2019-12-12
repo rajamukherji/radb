@@ -21,7 +21,7 @@ typedef struct entry_t {
 typedef struct header_t {
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;
-	uint32_t Reserved1, Reserved2;
+	uint32_t FreeEntry, Reserved2;
 	entry_t Entries[];
 } header_t;
 
@@ -59,6 +59,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	Store->Header->NumNodes = NumNodes;
 	Store->Header->NumFreeNodes = NumNodes;
 	Store->Header->FreeNode = 0;
+	Store->Header->FreeEntry = 0;
 	for (int I = 0; I < NumEntries; ++I) {
 		Store->Header->Entries[I].Link = INVALID_INDEX;
 		Store->Header->Entries[I].Length = 0;
@@ -147,7 +148,6 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 		Store->HeaderSize = HeaderSize;
 	}
 	size_t OldLength = Store->Header->Entries[Index].Length;
-	if (OldLength == INVALID_INDEX) return;
 	Store->Header->Entries[Index].Length = Length;
 	size_t NodeSize = Store->Header->NodeSize;
 	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
@@ -238,6 +238,54 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 	}
 	//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
+}
+
+size_t string_store_alloc(string_store_t *Store) {
+	size_t FreeEntry = Store->Header->FreeEntry;
+	size_t Index = Store->Header->Entries[FreeEntry].Link;
+	if (Index == INVALID_INDEX) {
+		Index = FreeEntry + 1;
+		if (Index >= Store->Header->NumEntries) {
+			size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+			NumEntries += 512 - 1;
+			NumEntries /= 512;
+			NumEntries *= 512;
+			size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+			ftruncate(Store->HeaderFd, HeaderSize);
+	#ifdef Linux
+			Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+	#else
+			munmap(Store->Header, Store->HeaderSize);
+			Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	#endif
+			entry_t *Entries = Store->Header->Entries;
+			for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+				Entries[I].Link = INVALID_INDEX;
+				Entries[I].Length = 0;
+			}
+			Store->Header->NumEntries += NumEntries;
+			Store->HeaderSize = HeaderSize;
+		}
+	}
+	Store->Header->FreeEntry = Index;
+	return FreeEntry;
+}
+
+void string_store_free(string_store_t *Store, size_t Index) {
+	size_t OldLength = Store->Header->Entries[Index].Length;
+	Store->Header->Entries[Index].Length = 0;
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
+	if (OldNumBlocks > 0) {
+		size_t FreeStart = Store->Header->Entries[Index].Link;
+		void *FreeEnd = Store->Data + FreeStart * NodeSize;
+		Store->Header->NumFreeNodes += OldNumBlocks;
+		for (int I = OldNumBlocks; --I > 0;) FreeEnd = Store->Data + NodeSize * NODE_LINK(FreeEnd);
+		NODE_LINK(FreeEnd) = Store->Header->FreeNode;
+		Store->Header->FreeNode = FreeStart;
+	}
+	Store->Header->Entries[Index].Link = Store->Header->FreeEntry;
+	Store->Header->FreeEntry = Index;
 }
 
 void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Store, size_t Index) {

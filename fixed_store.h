@@ -13,4 +13,7 @@ void fixed_store_close(fixed_store_t *Store);
 
 void *fixed_store_get(fixed_store_t *Store, size_t Index);
 
+size_t fixed_store_alloc(fixed_store_t *Store);
+void fixed_store_free(fixed_store_t *Store, size_t Index);
+
 #endif

@@ -117,7 +117,7 @@ size_t string_index_count(string_index_t *Store) {
 	return Store->Header->NumKeys;
 }
 
-const void *string_index_get(string_index_t *Store, size_t Index) {
+const char *string_index_get(string_index_t *Store, size_t Index) {
 	if (Index < Store->Header->NumKeys) return Store->Strings + Store->Header->Keys[Index];
 	return 0;
 }
@@ -162,7 +162,7 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-size_t string_index_insert(string_index_t *Store, const void *Key) {
+size_t string_index_insert(string_index_t *Store, const char *Key) {
 uint32_t Hash = hash(Key);
 	unsigned int Mask = Store->Header->HashSize - 1;
 	for (;;) {
@@ -288,7 +288,7 @@ uint32_t Hash = hash(Key);
 	return INVALID_INDEX;
 }
 
-size_t string_index_search(string_index_t *Store, const void *Key) {
+size_t string_index_search(string_index_t *Store, const char *Key) {
 	uint32_t Hash = hash(Key);
 	unsigned int Mask = Store->Header->HashSize - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;

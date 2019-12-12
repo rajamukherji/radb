@@ -112,6 +112,18 @@ static ml_value_t *ml_string_store_set(void *Data, int Count, ml_value_t **Args)
 	return Args[2];
 }
 
+static ml_value_t *ml_string_store_alloc(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
+	return ml_integer(string_store_alloc(Store->Handle));
+}
+
+static ml_value_t *ml_string_store_free(void *Data, int Count, ml_value_t **Args) {
+	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
+	size_t Index = ml_integer_value(Args[1]);
+	string_store_free(Store->Handle, Index);
+	return Args[0];
+}
+
 static ml_value_t *ml_string_store_writer_open(void *Data, int Count, ml_value_t **Args) {
 	ml_string_store_t *Store = (ml_string_store_t *)Args[0];
 	ml_string_store_writer_t *Writer = new(ml_string_store_writer_t);
@@ -202,6 +214,8 @@ int main(int Argc, const char *Argv[]) {
 	stringmap_insert(Globals, "store_create", ml_function(0, ml_string_store_create));
 	ml_method_by_name("get", 0, ml_string_store_get, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("set", 0, ml_string_store_set, StringStoreT, MLIntegerT, MLStringT, NULL);
+	ml_method_by_name("alloc", 0, ml_string_store_alloc, StringStoreT, NULL);
+	ml_method_by_name("free", 0, ml_string_store_free, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("write", 0, ml_string_store_writer_open, StringStoreT, MLIntegerT, NULL);
 	ml_method_by_name("write", 0, ml_string_store_writer_write, StringStoreWriterT, MLStringT, NULL);
 	ml_method_by_name("read", 0, ml_string_store_reader_open, StringStoreT, MLIntegerT, NULL);

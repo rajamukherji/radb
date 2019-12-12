@@ -17,6 +17,9 @@ size_t string_store_get_size(string_store_t *Store, size_t Index);
 void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer);
 void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, size_t Length);
 
+size_t string_store_alloc(string_store_t *Store);
+void string_store_free(string_store_t *Store, size_t Index);
+
 struct string_store_writer_t {
 	string_store_t *Store;
 	void *Node;
