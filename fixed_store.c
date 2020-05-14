@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #ifndef NO_GC
 #include <gc.h>
 #define new(T) ((T *)GC_malloc(sizeof(T)))
