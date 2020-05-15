@@ -227,6 +227,7 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 		sprintf(FileName, "%s.hashes", Store->Prefix);
 		rename(FileName2, FileName);
 
+		Store->HashSize = NewSize;
 		Store->Hashes = NewHashes;
 		Store->HashesFd = HashesFd;
 		string_store_set_extra(Store->Keys, Store->HashSize);
