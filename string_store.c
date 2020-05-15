@@ -22,7 +22,7 @@ typedef struct entry_t {
 typedef struct header_t {
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;
-	uint32_t FreeEntry, Reserved2;
+	uint32_t FreeEntry, Extra;
 	entry_t Entries[];
 } header_t;
 
@@ -33,6 +33,14 @@ struct string_store_t {
 	size_t HeaderSize;
 	int HeaderFd, DataFd;
 };
+
+uint32_t string_store_get_extra(string_store_t *Store) {
+	return Store->Header->Extra;
+}
+
+void string_store_set_extra(string_store_t *Store, uint32_t Value) {
+	Store->Header->Extra = Value;
+}
 
 #define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
 
@@ -106,6 +114,10 @@ void string_store_close(string_store_t *Store) {
 	close(Store->HeaderFd);
 }
 
+size_t string_store_num_entries(string_store_t *Store) {
+	return Store->Header->NumEntries;
+}
+
 size_t string_store_get_size(string_store_t *Store, size_t Index) {
 	if (Index >= Store->Header->NumEntries) return 0;
 	return Store->Header->Entries[Index].Length;
@@ -124,6 +136,81 @@ void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer) {
 		Node = Store->Data + NodeSize * NODE_LINK(Node);
 	}
 	memcpy(Buffer, Node, Length);
+}
+
+int string_store_compare(string_store_t *Store, size_t Index, const void *Other, size_t Length) {
+	if (Index >= Store->Header->NumEntries) return - 1;
+	size_t Length2 = Store->Header->Entries[Index].Length;
+	size_t Link = Store->Header->Entries[Index].Link;
+	size_t NodeSize = Store->Header->NodeSize;
+	void *Node = Store->Data + Link * NodeSize;
+	while (Length2 > NodeSize) {
+		if (Length < NodeSize) {
+			return memcmp(Other, Node, Length2) ?: -1;
+		}
+		int Cmp = memcmp(Other, Node, NodeSize - 4);
+		if (Cmp) return Cmp;
+		Other += NodeSize - 4;
+		Length2 -= NodeSize - 4;
+		Length -= NodeSize - 4;
+		Node = Store->Data + NodeSize * NODE_LINK(Node);
+	}
+	if (Length < Length2) {
+		return memcmp(Other, Node, Length) ?: -1;
+	} else if (Length > Length2) {
+		return memcmp(Other, Node, Length2) ?: 1;
+	} else {
+		return memcmp(Other, Node, Length);
+	}
+}
+
+int string_store_compare2(string_store_t *Store, size_t Index1, size_t Index2) {
+	if (Index1 >= Store->Header->NumEntries) return -1;
+	if (Index2 >= Store->Header->NumEntries) return 1;
+	size_t Length1 = Store->Header->Entries[Index1].Length;
+	size_t Length2 = Store->Header->Entries[Index2].Length;
+	size_t Link1 = Store->Header->Entries[Index1].Link;
+	size_t Link2 = Store->Header->Entries[Index2].Link;
+	size_t NodeSize = Store->Header->NodeSize;
+	void *Node1 = Store->Data + Link1 * NodeSize;
+	void *Node2 = Store->Data + Link2 * NodeSize;
+	while (Length1 > NodeSize && Length2 > NodeSize) {
+		int Cmp = memcmp(Node1, Node2, NodeSize - 4);
+		if (Cmp) return Cmp;
+		Length1 -= NodeSize - 4;
+		Length2 -= NodeSize - 4;
+		Node1 = Store->Data + NodeSize * NODE_LINK(Node1);
+		Node2 = Store->Data + NodeSize * NODE_LINK(Node2);
+	}
+	if (Length1 > NodeSize) {
+		if (Length2 > NodeSize - 4) {
+			int Cmp = memcmp(Node1, Node2, NodeSize - 4);
+			if (Cmp) return Cmp;
+			Length1 -= NodeSize - 4;
+			Length2 -= NodeSize - 4;
+			Node1 = Store->Data + NodeSize * NODE_LINK(Node1);
+			return memcmp(Node1, Node2 + NodeSize - 4, Length2) ?: 1;
+		} else {
+			return memcmp(Node1, Node2, Length2) ?: 1;
+		}
+	} else if (Length2 > NodeSize) {
+		if (Length1 > NodeSize - 4) {
+			int Cmp = memcmp(Node1, Node2, NodeSize - 4);
+			if (Cmp) return Cmp;
+			Length1 -= NodeSize - 4;
+			Length2 -= NodeSize - 4;
+			Node2 = Store->Data + NodeSize * NODE_LINK(Node2);
+			return memcmp(Node1 + NodeSize - 4, Node2, Length1) ?: -1;
+		} else {
+			return memcmp(Node1, Node2, Length1) ?: -1;
+		}
+	} else if (Length1 > Length2) {
+		return memcmp(Node1, Node2, Length2) ?: 1;
+	} else if (Length2 > Length1) {
+		return memcmp(Node1, Node2, Length1) ?: 1;
+	} else {
+		return memcmp(Node1, Node2, Length1);
+	}
 }
 
 void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, size_t Length) {
