@@ -20,12 +20,18 @@ typedef struct hash_t {
 	uint32_t Link;
 } hash_t;
 
+typedef struct header_t {
+	uint32_t Size;
+	uint32_t Space;
+	hash_t Hashes[];
+} header_t;
+
 struct string_index_t {
 	const char *Prefix;
-	hash_t *Hashes;
+	header_t *Header;
 	string_store_t *Keys;
-	uint32_t HashSize;
-	int HashesFd;
+	size_t HeaderSize;
+	int HeaderFd;
 	int SyncCounter;
 };
 
@@ -41,16 +47,15 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	Store->Prefix = GC_strdup(Prefix);
 #endif
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.keys", Prefix);
-	Store->HashSize = 64;
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.hashes", Prefix);
-	Store->HashesFd = open(FileName, O_RDWR | O_CREAT, 0777);
-	ftruncate(Store->HashesFd, Store->HashSize * sizeof(hash_t));
-	Store->Hashes = mmap(NULL, Store->HashSize * sizeof(hash_t), PROT_READ | PROT_WRITE, MAP_SHARED, Store->HashesFd, 0);
-	for (int I = 0; I < Store->HashSize; ++I) Store->Hashes[I].Link = INVALID_INDEX;
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderSize = sizeof(header_t) + 64 * sizeof(hash_t);
+	ftruncate(Store->HeaderFd, Store->HeaderSize);
+	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	Store->Header->Size = Store->Header->Space = 64;
+	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
 	Store->Keys = string_store_create(Prefix, KeySize, ChunkSize);
-	string_store_set_extra(Store->Keys, Store->HashSize);
 	//msync(Index->Header, Index->HeaderSize, MS_ASYNC);
 	//msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 	return Store;
@@ -63,12 +68,14 @@ string_index_t *string_index_open(const char *Prefix) {
 #else
 	Store->Prefix = GC_strdup(Prefix);
 #endif
+	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
-	Store->Keys = string_store_open(Prefix);
-	Store->HashSize = string_store_get_extra(Store->Keys);
 	sprintf(FileName, "%s.hashes", Prefix);
-	Store->HashesFd = open(FileName, O_RDWR, 0777);
-	Store->Hashes = mmap(NULL, Store->HashSize * sizeof(hash_t), PROT_READ | PROT_WRITE, MAP_SHARED, Store->HashesFd, 0);
+	if (stat(FileName, Stat)) return NULL;
+	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	Store->HeaderSize = Stat->st_size;
+	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	Store->Keys = string_store_open(Prefix);
 	return Store;
 }
 
@@ -76,9 +83,9 @@ void string_index_close(string_index_t *Store) {
 	//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
 	//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
 	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
-	munmap(Store->Hashes, Store->HashSize * sizeof(hash_t));
-	close(Store->HashesFd);
 	string_store_close(Store->Keys);
+	munmap(Store->Header, Store->HeaderSize);
+	close(Store->HeaderFd);
 }
 
 inline uint32_t hash(const char *Key) {
@@ -149,11 +156,11 @@ typedef struct {
 string_index_result_t string_index_insert2(string_index_t *Store, const char *Key) {
 	size_t Length = strlen(Key);
 	uint32_t Hash = hash(Key);
-	unsigned int Mask = Store->HashSize - 1;
+	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
 		unsigned int Incr = ((Hash >> 8) | 1) & Mask;
 		unsigned int Index = Hash & Mask;
-		hash_t *Hashes = Store->Hashes;
+		hash_t *Hashes = Store->Header->Hashes;
 		for (;;) {
 			if (Hashes[Index].Link == INVALID_INDEX) break;
 			if (Hashes[Index].Hash < Hash) break;
@@ -165,8 +172,9 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 			Index += Incr;
 			Index &= Mask;
 		}
-		size_t Space = Store->HashSize - string_store_num_entries(Store->Keys);
-		if (--Space > Store->HashSize >> 3) {
+		size_t Space = Store->Header->Space;
+		if (--Space > Store->Header->Size >> 3) {
+			Store->Header->Space = Space;
 			uint32_t Result = string_store_alloc(Store->Keys);
 			string_store_set(Store->Keys, Result, Key, Length);
 			hash_t Old = Hashes[Index];
@@ -200,41 +208,40 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 			return (string_index_result_t){Result, 1};
 		}
-		size_t NewSize = Store->HashSize * 2;
-		Mask = NewSize - 1;
+		size_t HashSize = Store->Header->Size * 2;
+		Mask = HashSize - 1;
 
 		char FileName2[strlen(Store->Prefix) + 10];
 		sprintf(FileName2, "%s.temp", Store->Prefix);
 
-		size_t HashMapSize = NewSize * sizeof(hash_t);
-		int HashesFd = open(FileName2, O_RDWR | O_CREAT, 0777);
-		ftruncate(HashesFd, HashMapSize);
-		hash_t *NewHashes = mmap(NULL, HashMapSize, PROT_READ | PROT_WRITE, MAP_SHARED, HashesFd, 0);
-		for (int I = 0; I < NewSize; ++I) NewHashes[I].Link = INVALID_INDEX;
+		size_t HeaderSize = sizeof(header_t) + HashSize * sizeof(hash_t);
+		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
+		ftruncate(HeaderFd, HeaderSize);
+		header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
+		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
-		sort_hashes(Store, Hashes, Hashes + Store->HashSize - 1);
+		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
 		for (hash_t *Old = Hashes; Old->Link != INVALID_INDEX; ++Old) {
 			unsigned long NewHash = Old->Hash;
 			unsigned int NewIncr = ((NewHash >> 8) | 1) & Mask;
 			unsigned int NewIndex = NewHash & Mask;
-			while (NewHashes[NewIndex].Link != INVALID_INDEX) {
+			while (Header->Hashes[NewIndex].Link != INVALID_INDEX) {
 				NewIndex += NewIncr;
 				NewIndex &= Mask;
 			}
-			NewHashes[NewIndex] = Old[0];
+			Header->Hashes[NewIndex] = Old[0];
 		}
 
-		munmap(Store->Hashes, Store->HashSize * sizeof(hash_t));
-		close(Store->HashesFd);
+		munmap(Store->Header, Store->HeaderSize);
+		close(Store->HeaderFd);
 
 		char FileName[strlen(Store->Prefix) + 10];
 		sprintf(FileName, "%s.hashes", Store->Prefix);
 		rename(FileName2, FileName);
 
-		Store->HashSize = NewSize;
-		Store->Hashes = NewHashes;
-		Store->HashesFd = HashesFd;
-		string_store_set_extra(Store->Keys, Store->HashSize);
+		Store->HeaderSize = HeaderSize;
+		Store->Header = Header;;
+		Store->HeaderFd = HeaderFd;
 
 		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
@@ -249,10 +256,10 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 size_t string_index_search(string_index_t *Store, const char *Key) {
 	size_t Length = strlen(Key);
 	uint32_t Hash = hash(Key);
-	unsigned int Mask = Store->HashSize - 1;
+	unsigned int Mask = Store->Header->Size - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
 	unsigned int Index = Hash & Mask;
-	hash_t *Hashes = Store->Hashes;
+	hash_t *Hashes = Store->Header->Hashes;
 	for (;;) {
 		if (Hashes[Index].Link == INVALID_INDEX) break;
 		if (Hashes[Index].Hash < Hash) break;
