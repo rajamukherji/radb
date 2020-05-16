@@ -48,7 +48,7 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 #endif
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
-	sprintf(FileName, "%s..index", Prefix);
+	sprintf(FileName, "%s.index", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	Store->HeaderSize = sizeof(header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
