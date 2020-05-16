@@ -48,7 +48,7 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 #endif
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
-	sprintf(FileName, "%s.hashes", Prefix);
+	sprintf(FileName, "%s..index", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
 	Store->HeaderSize = sizeof(header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
@@ -70,7 +70,7 @@ string_index_t *string_index_open(const char *Prefix) {
 #endif
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.hashes", Prefix);
+	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return NULL;
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
@@ -238,7 +238,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		close(Store->HeaderFd);
 
 		char FileName[strlen(Store->Prefix) + 10];
-		sprintf(FileName, "%s.hashes", Store->Prefix);
+		sprintf(FileName, "%s.index", Store->Prefix);
 		rename(FileName2, FileName);
 
 		Store->HeaderSize = HeaderSize;
