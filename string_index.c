@@ -219,7 +219,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		ftruncate(HeaderFd, HeaderSize);
 		header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Size = HashSize;
-		Header->Space = Space;
+		Header->Space = Space + Store->Header->Size;
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
 		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
