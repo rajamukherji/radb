@@ -138,15 +138,15 @@ void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer) {
 	memcpy(Buffer, Node, Length);
 }
 
-int string_store_compare(string_store_t *Store, size_t Index, const void *Other, size_t Length) {
-	if (Index >= Store->Header->NumEntries) return - 1;
+int string_store_compare(string_store_t *Store, const void *Other, size_t Length, size_t Index) {
+	if (Index >= Store->Header->NumEntries) return 1;
 	size_t Length2 = Store->Header->Entries[Index].Length;
 	size_t Link = Store->Header->Entries[Index].Link;
 	size_t NodeSize = Store->Header->NodeSize;
 	void *Node = Store->Data + Link * NodeSize;
 	while (Length2 > NodeSize) {
-		if (Length < NodeSize) {
-			return memcmp(Other, Node, Length2) ?: -1;
+		if (Length < NodeSize - 4) {
+			return memcmp(Other, Node, Length) ?: -1;
 		}
 		int Cmp = memcmp(Other, Node, NodeSize - 4);
 		if (Cmp) return Cmp;

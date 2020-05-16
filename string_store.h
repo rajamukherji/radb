@@ -19,7 +19,7 @@ size_t string_store_get_size(string_store_t *Store, size_t Index);
 void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer);
 void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, size_t Length);
 
-int string_store_compare(string_store_t *Store, size_t Index, const void *Other, size_t Length);
+int string_store_compare(string_store_t *Store, const void *Other, size_t Length, size_t Index);
 int string_store_compare2(string_store_t *Store, size_t Index1, size_t Index2);
 
 size_t string_store_alloc(string_store_t *Store);

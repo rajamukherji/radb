@@ -63,7 +63,6 @@ string_index_t *string_index_open(const char *Prefix) {
 #else
 	Store->Prefix = GC_strdup(Prefix);
 #endif
-	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	Store->Keys = string_store_open(Prefix);
 	Store->HashSize = string_store_get_extra(Store->Keys);
@@ -82,12 +81,12 @@ void string_index_close(string_index_t *Store) {
 	string_store_close(Store->Keys);
 }
 
-#define hash(KEY) ({ \
-	uint32_t Hash = 5381; \
-	unsigned char *P = (unsigned char *)(KEY); \
-	while (P[0]) Hash = ((Hash << 5) + Hash) + P++[0]; \
-	Hash; \
-})
+inline uint32_t hash(const char *Key) {
+	uint32_t Hash = 5381;
+	unsigned char *P = (unsigned char *)(Key);
+	while (P[0]) Hash = ((Hash << 5) + Hash) + P++[0];
+	return Hash;
+}
 
 size_t string_index_count(string_index_t *Store) {
 	return string_store_num_entries(Store->Keys);
@@ -142,7 +141,12 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-size_t string_index_insert(string_index_t *Store, const char *Key) {
+typedef struct {
+	size_t Index;
+	int Created;
+} string_index_result_t;
+
+string_index_result_t string_index_insert2(string_index_t *Store, const char *Key) {
 	size_t Length = strlen(Key);
 	uint32_t Hash = hash(Key);
 	unsigned int Mask = Store->HashSize - 1;
@@ -154,9 +158,9 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 			if (Hashes[Index].Link == INVALID_INDEX) break;
 			if (Hashes[Index].Hash < Hash) break;
 			if (Hashes[Index].Hash == Hash) {
-				int Cmp = string_store_compare(Store->Keys, Hashes[Index].Link, Key, Length);
+				int Cmp = string_store_compare(Store->Keys, Key, Length, Hashes[Index].Link);
 				if (Cmp < 0) break;
-				if (Cmp == 0) return Hashes[Index].Link;
+				if (Cmp == 0) return (string_index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
 			Index &= Mask;
@@ -176,7 +180,7 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return Result;
+						return (string_index_result_t){Result, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
@@ -194,7 +198,7 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return Result;
+			return (string_index_result_t){Result, 1};
 		}
 		size_t NewSize = Store->HashSize * 2;
 		Mask = NewSize - 1;
@@ -234,7 +238,12 @@ size_t string_index_insert(string_index_t *Store, const char *Key) {
 
 		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
-	return INVALID_INDEX;
+
+	return (string_index_result_t){INVALID_INDEX, 0};
+}
+
+size_t string_index_insert(string_index_t *Store, const char *Key) {
+	return string_index_insert2(Store, Key).Index;
 }
 
 size_t string_index_search(string_index_t *Store, const char *Key) {
@@ -248,7 +257,7 @@ size_t string_index_search(string_index_t *Store, const char *Key) {
 		if (Hashes[Index].Link == INVALID_INDEX) break;
 		if (Hashes[Index].Hash < Hash) break;
 		if (Hashes[Index].Hash == Hash) {
-			int Cmp = string_store_compare(Store->Keys, Hashes[Index].Link, Key, Length);
+			int Cmp = string_store_compare(Store->Keys, Key, Length, Hashes[Index].Link);
 			if (Cmp < 0) break;
 			if (Cmp == 0) return Hashes[Index].Link;
 		}
@@ -256,4 +265,8 @@ size_t string_index_search(string_index_t *Store, const char *Key) {
 		Index &= Mask;
 	}
 	return INVALID_INDEX;
+}
+
+size_t string_index_delete(string_index_t *Store, const char *Key) {
+	return 0;
 }
