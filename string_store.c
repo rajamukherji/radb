@@ -22,7 +22,7 @@ typedef struct entry_t {
 typedef struct header_t {
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;
-	uint32_t FreeEntry, Extra;
+	uint32_t FreeEntry, Reserved;
 	entry_t Entries[];
 } header_t;
 
@@ -33,14 +33,6 @@ struct string_store_t {
 	size_t HeaderSize;
 	int HeaderFd, DataFd;
 };
-
-uint32_t string_store_get_extra(string_store_t *Store) {
-	return Store->Header->Extra;
-}
-
-void string_store_set_extra(string_store_t *Store, uint32_t Value) {
-	Store->Header->Extra = Value;
-}
 
 #define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
 

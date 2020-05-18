@@ -22,7 +22,8 @@ endif
 common_objects = \
 	string_store.o \
 	string_index.o \
-	fixed_store.o
+	fixed_store.o \
+	fixed_index.o
 
 platform_objects =
 
