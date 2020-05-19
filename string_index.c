@@ -119,7 +119,7 @@ void string_index_close(string_index_t *Store) {
 #endif
 }
 
-inline uint32_t hash(const char *Key, int Length) {
+static uint32_t hash(const char *Key, int Length) {
 	uint32_t Hash = 5381;
 	unsigned char *P = (unsigned char *)(Key);
 	for (int I = Length; --I >= 0;) Hash = ((Hash << 5) + Hash) + P++[0];
