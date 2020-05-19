@@ -97,6 +97,10 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 }
 
 string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
+	struct stat Stat[1];
+	char FileName[strlen(Prefix) + 10];
+	sprintf(FileName, "%s.entries", Prefix);
+	if (stat(FileName, Stat)) return NULL;
 #if defined(RADB_MEM_MALLOC)
 	string_store_t *Store = malloc(sizeof(string_store_t));
 	Store->Prefix = strdup(Prefix);
@@ -110,10 +114,6 @@ string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	struct stat Stat[1];
-	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.entries", Prefix);
-	if (stat(FileName, Stat)) return NULL;
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -130,6 +130,14 @@ void string_store_close(string_store_t *Store) {
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->DataFd);
 	close(Store->HeaderFd);
+#if defined(RADB_MEM_MALLOC)
+	free((void *)Store->Prefix);
+	free(Store);
+#elif defined(RADB_MEM_GC)
+#else
+	Store->free((void *)Store->Prefix);
+	Store->free(Store);
+#endif
 }
 
 size_t string_store_num_entries(string_store_t *Store) {

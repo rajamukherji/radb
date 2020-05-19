@@ -78,6 +78,10 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 }
 
 string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
+	struct stat Stat[1];
+	char FileName[strlen(Prefix) + 10];
+	sprintf(FileName, "%s.index", Prefix);
+	if (stat(FileName, Stat)) return NULL;
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -91,10 +95,6 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	struct stat Stat[1];
-	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.index", Prefix);
-	if (stat(FileName, Stat)) return NULL;
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -109,6 +109,14 @@ void string_index_close(string_index_t *Store) {
 	string_store_close(Store->Keys);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->HeaderFd);
+#if defined(RADB_MEM_MALLOC)
+	free((void *)Store->Prefix);
+	free(Store);
+#elif defined(RADB_MEM_GC)
+#else
+	Store->free((void *)Store->Prefix);
+	Store->free(Store);
+#endif
 }
 
 inline uint32_t hash(const char *Key) {
