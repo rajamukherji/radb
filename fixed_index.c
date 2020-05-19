@@ -114,10 +114,10 @@ void fixed_index_close(fixed_index_t *Store) {
 	close(Store->HeaderFd);
 }
 
-inline uint32_t hash(const char *Key) {
+inline uint32_t hash(const char *Key, int KeyLength) {
 	uint32_t Hash = 5381;
 	unsigned char *P = (unsigned char *)(Key);
-	while (P[0]) Hash = ((Hash << 5) + Hash) + P++[0];
+	for (int I = KeyLength; --I >= 0;) Hash = ((Hash << 5) + Hash) + P++[0];
 	return Hash;
 }
 
@@ -174,7 +174,7 @@ typedef struct {
 } fixed_index_result_t;
 
 fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
-	uint32_t Hash = hash(Key);
+	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
 		unsigned int Incr = ((Hash >> 8) | 1) & Mask;
@@ -279,7 +279,7 @@ size_t fixed_index_insert(fixed_index_t *Store, const char *Key) {
 }
 
 size_t fixed_index_search(fixed_index_t *Store, const char *Key) {
-	uint32_t Hash = hash(Key);
+	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
 	unsigned int Index = Hash & Mask;
