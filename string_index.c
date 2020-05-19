@@ -119,10 +119,10 @@ void string_index_close(string_index_t *Store) {
 #endif
 }
 
-inline uint32_t hash(const char *Key) {
+inline uint32_t hash(const char *Key, int Length) {
 	uint32_t Hash = 5381;
 	unsigned char *P = (unsigned char *)(Key);
-	while (P[0]) Hash = ((Hash << 5) + Hash) + P++[0];
+	for (int I = Length; --I >= 0;) Hash = ((Hash << 5) + Hash) + P++[0];
 	return Hash;
 }
 
@@ -192,7 +192,7 @@ typedef struct {
 
 string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
-	uint32_t Hash = hash(Key);
+	uint32_t Hash = hash(Key, Length);
 	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
 		unsigned int Incr = ((Hash >> 8) | 1) & Mask;
@@ -294,7 +294,7 @@ size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length
 
 size_t string_index_search(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
-	uint32_t Hash = hash(Key);
+	uint32_t Hash = hash(Key, Length);
 	unsigned int Mask = Store->Header->Size - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
 	unsigned int Index = Hash & Mask;
