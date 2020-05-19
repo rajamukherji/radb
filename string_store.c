@@ -8,11 +8,9 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#ifndef NO_GC
-#include <gc.h>
-#define new(T) ((T *)GC_malloc(sizeof(T)))
-#else
-#define new(T) ((T *)malloc(sizeof(T)))
+
+#ifdef RADB_MEM_GC
+#include <gc/gc.h>
 #endif
 
 typedef struct entry_t {
@@ -27,6 +25,11 @@ typedef struct header_t {
 } header_t;
 
 struct string_store_t {
+#ifdef RADB_MEM_PER_STORE
+	void *(*alloc)(size_t);
+	void *(*alloc_atomic)(size_t);
+	void (*free)(void *);
+#endif
 	const char *Prefix;
 	header_t *Header;
 	void *Data;
@@ -36,18 +39,34 @@ struct string_store_t {
 
 #define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
 
-string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize) {
+#ifdef RADB_MEM_PER_STORE
+static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+	size_t Length = strlen(String);
+	char *Copy = alloc_atomic(Length + 1);
+	strcpy(Copy, String);
+	return Copy;
+}
+#endif
+
+string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	string_store_t *Store = malloc(sizeof(string_store_t));
+	Store->Prefix = strdup(Prefix);
+#elif defined(RADB_MEM_GC)
+	string_store_t *Store = GC_malloc(sizeof(string_store_t));
+	Store->Prefix = GC_strdup(Prefix);
+#else
+	string_store_t *Store = alloc(sizeof(string_store_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
+#endif
 	size_t NodeSize = 8;
 	while (NodeSize < RequestedSize) NodeSize *= 2;
 	if (!ChunkSize) ChunkSize = 512;
 	int NumEntries = (512 - sizeof(header_t)) / sizeof(entry_t);
 	int NumNodes = (ChunkSize + NodeSize - 1) / NodeSize;
-	string_store_t *Store = new(string_store_t);
-#ifndef NO_GC
-	Store->Prefix = strdup(Prefix);
-#else
-	Store->Prefix = GC_strdup(Prefix);
-#endif
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
@@ -77,12 +96,19 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	return Store;
 }
 
-string_store_t *string_store_open(const char *Prefix) {
-	string_store_t *Store = new(string_store_t);
-#ifndef NO_GC
+string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	string_store_t *Store = malloc(sizeof(string_store_t));
 	Store->Prefix = strdup(Prefix);
-#else
+#elif defined(RADB_MEM_GC)
+	string_store_t *Store = GC_malloc(sizeof(string_store_t));
 	Store->Prefix = GC_strdup(Prefix);
+#else
+	string_store_t *Store = alloc(sizeof(string_store_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
 #endif
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];

@@ -1,14 +1,16 @@
 #ifndef FIXED_INDEX_H
 #define FIXED_INDEX_H
 
+#include "common.h"
+
 #include <stddef.h>
 
 #define INVALID_INDEX 0xFFFFFFFF
 
 typedef struct fixed_index_t fixed_index_t;
 
-fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize);
-fixed_index_t *fixed_index_open(const char *Prefix);
+fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS);
+fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS);
 size_t fixed_index_count(fixed_index_t *Store);
 void fixed_index_close(fixed_index_t *Store);
 

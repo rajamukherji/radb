@@ -1,14 +1,16 @@
 #ifndef STRING_INDEX_H
 #define STRING_INDEX_H
 
+#include "common.h"
+
 #include <stddef.h>
 
 #define INVALID_INDEX 0xFFFFFFFF
 
 typedef struct string_index_t string_index_t;
 
-string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize);
-string_index_t *string_index_open(const char *Prefix);
+string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS);
+string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS);
 size_t string_index_count(string_index_t *Store);
 void string_index_close(string_index_t *Store);
 

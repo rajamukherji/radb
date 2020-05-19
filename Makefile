@@ -19,6 +19,14 @@ else
 	LDFLAGS += -g
 endif
 
+ifeq ($(RADB_MEM), MALLOC)
+	CFLAGS += -DRADB_MEM_MALLOC
+else ifeq ($(RADB_MEM), GC)
+	CFLAGS += -DRADB_MEM_GC
+else
+	CFLAGS += -DRADB_MEM_PER_STORE
+endif
+
 common_objects = \
 	string_store.o \
 	string_index.o \
@@ -64,9 +72,11 @@ install_lib = $(DESTDIR)$(PREFIX)/lib
 
 install_h = \
 	$(install_include)/radb.h \
-	$(install_include)/string_index.h \
+	$(install_include)/context.h \
 	$(install_include)/string_store.h \
-	$(install_include)/fixed_store.h
+	$(install_include)/string_index.h \
+	$(install_include)/fixed_store.h \
+	$(install_include)/fixed_index.h
 
 install_a = $(install_lib)/libradb.a
 

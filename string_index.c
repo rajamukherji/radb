@@ -8,11 +8,9 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#ifndef NO_GC
-#include <gc.h>
-#define new(T) ((T *)GC_malloc(sizeof(T)))
-#else
-#define new(T) ((T *)malloc(sizeof(T)))
+
+#ifdef RADB_MEM_GC
+#include <gc/gc.h>
 #endif
 
 typedef struct hash_t {
@@ -27,6 +25,11 @@ typedef struct header_t {
 } header_t;
 
 struct string_index_t {
+#ifdef RADB_MEM_PER_STORE
+	void *(*alloc)(size_t);
+	void *(*alloc_atomic)(size_t);
+	void (*free)(void *);
+#endif
 	const char *Prefix;
 	header_t *Header;
 	string_store_t *Keys;
@@ -35,14 +38,30 @@ struct string_index_t {
 	int SyncCounter;
 };
 
-string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize) {
-	if (!ChunkSize) ChunkSize = 512;
-	string_index_t *Store = new(string_index_t);
-#ifndef NO_GC
-	Store->Prefix = strdup(Prefix);
-#else
-	Store->Prefix = GC_strdup(Prefix);
+#ifdef RADB_MEM_PER_STORE
+static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+	size_t Length = strlen(String);
+	char *Copy = alloc_atomic(Length + 1);
+	strcpy(Copy, String);
+	return Copy;
+}
 #endif
+
+string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	string_index_t *Store = malloc(sizeof(string_index_t));
+	Store->Prefix = strdup(Prefix);
+#elif defined(RADB_MEM_GC)
+	string_index_t *Store = GC_malloc(sizeof(string_index_t));
+	Store->Prefix = GC_strdup(Prefix);
+#else
+	string_index_t *Store = alloc(sizeof(string_index_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
+#endif
+	if (!ChunkSize) ChunkSize = 512;
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.index", Prefix);
@@ -52,18 +71,25 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	Store->Header->Size = Store->Header->Space = 64;
 	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
-	Store->Keys = string_store_create(Prefix, KeySize, ChunkSize);
+	Store->Keys = string_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
 	//msync(Index->Header, Index->HeaderSize, MS_ASYNC);
 	//msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 	return Store;
 }
 
-string_index_t *string_index_open(const char *Prefix) {
-	string_index_t *Store = new(string_index_t);
-#ifndef NO_GC
+string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	string_index_t *Store = malloc(sizeof(string_index_t));
 	Store->Prefix = strdup(Prefix);
-#else
+#elif defined(RADB_MEM_GC)
+	string_index_t *Store = GC_malloc(sizeof(string_index_t));
 	Store->Prefix = GC_strdup(Prefix);
+#else
+	string_index_t *Store = alloc(sizeof(string_index_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
 #endif
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
@@ -72,7 +98,7 @@ string_index_t *string_index_open(const char *Prefix) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	Store->Keys = string_store_open(Prefix);
+	Store->Keys = string_store_open(Prefix RADB_MEM_ARGS);
 	return Store;
 }
 
@@ -98,10 +124,12 @@ size_t string_index_count(string_index_t *Store) {
 
 const char *string_index_get(string_index_t *Store, size_t Index) {
 	size_t KeyLength = string_store_get_size(Store->Keys, Index);
-#ifndef NO_GC
+#if defined(RADB_MEM_MALLOC)
 	char *Key = malloc(KeyLength + 1);
-#else
+#elif defined(RADB_MEM_GC)
 	char *Key = GC_malloc_atomic(KeyLength + 1);
+#else
+	char *Key = Store->alloc_atomic(KeyLength + 1);
 #endif
 	string_store_get_value(Store->Keys, Index, Key);
 	Key[KeyLength] = 0;

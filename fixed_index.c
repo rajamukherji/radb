@@ -8,11 +8,9 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#ifndef NO_GC
-#include <gc.h>
-#define new(T) ((T *)GC_malloc(sizeof(T)))
-#else
-#define new(T) ((T *)malloc(sizeof(T)))
+
+#ifdef RADB_MEM_GC
+#include <gc/gc.h>
 #endif
 
 typedef struct hash_t {
@@ -29,6 +27,11 @@ typedef struct header_t {
 } header_t;
 
 struct fixed_index_t {
+#ifdef RADB_MEM_PER_STORE
+	void *(*alloc)(size_t);
+	void *(*alloc_atomic)(size_t);
+	void (*free)(void *);
+#endif
 	const char *Prefix;
 	header_t *Header;
 	fixed_store_t *Keys;
@@ -37,14 +40,30 @@ struct fixed_index_t {
 	int SyncCounter;
 };
 
-fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize) {
-	if (!ChunkSize) ChunkSize = 512;
-	fixed_index_t *Store = new(fixed_index_t);
-#ifndef NO_GC
-	Store->Prefix = strdup(Prefix);
-#else
-	Store->Prefix = GC_strdup(Prefix);
+#ifdef RADB_MEM_PER_STORE
+static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+	size_t Length = strlen(String);
+	char *Copy = alloc_atomic(Length + 1);
+	strcpy(Copy, String);
+	return Copy;
+}
 #endif
+
+fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
+	Store->Prefix = strdup(Prefix);
+#elif defined(RADB_MEM_GC)
+	fixed_index_t *Store = GC_malloc(sizeof(fixed_index_t));
+	Store->Prefix = GC_strdup(Prefix);
+#else
+	fixed_index_t *Store = alloc(sizeof(fixed_index_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
+#endif
+	if (!ChunkSize) ChunkSize = 512;
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.index", Prefix);
@@ -55,18 +74,25 @@ fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t Chu
 	Store->Header->Size = Store->Header->Space = 64;
 	Store->Header->KeySize = KeySize;
 	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
-	Store->Keys = fixed_store_create(Prefix, KeySize, ChunkSize);
+	Store->Keys = fixed_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
 	//msync(Index->Header, Index->HeaderSize, MS_ASYNC);
 	//msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 	return Store;
 }
 
-fixed_index_t *fixed_index_open(const char *Prefix) {
-	fixed_index_t *Store = new(fixed_index_t);
-#ifndef NO_GC
+fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
+#if defined(RADB_MEM_MALLOC)
+	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
 	Store->Prefix = strdup(Prefix);
-#else
+#elif defined(RADB_MEM_GC)
+	fixed_index_t *Store = GC_malloc(sizeof(fixed_index_t));
 	Store->Prefix = GC_strdup(Prefix);
+#else
+	fixed_index_t *Store = alloc(sizeof(fixed_index_t));
+	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	Store->alloc = alloc;
+	Store->alloc_atomic = alloc_atomic;
+	Store->free = free;
 #endif
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
@@ -75,7 +101,7 @@ fixed_index_t *fixed_index_open(const char *Prefix) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	Store->Keys = fixed_store_open(Prefix);
+	Store->Keys = fixed_store_open(Prefix RADB_MEM_ARGS);
 	return Store;
 }
 
