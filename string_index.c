@@ -130,8 +130,12 @@ size_t string_index_count(string_index_t *Store) {
 	return Store->Header->Size - Store->Header->Space;
 }
 
+size_t string_index_size(string_index_t *Store, size_t Index) {
+	return string_store_size(Store->Keys, Index);
+}
+
 const char *string_index_get(string_index_t *Store, size_t Index) {
-	size_t KeyLength = string_store_get_size(Store->Keys, Index);
+	size_t KeyLength = string_store_size(Store->Keys, Index);
 #if defined(RADB_MEM_MALLOC)
 	char *Key = malloc(KeyLength + 1);
 #elif defined(RADB_MEM_GC)
@@ -139,7 +143,7 @@ const char *string_index_get(string_index_t *Store, size_t Index) {
 #else
 	char *Key = Store->alloc_atomic(KeyLength + 1);
 #endif
-	string_store_get_value(Store->Keys, Index, Key);
+	string_store_get(Store->Keys, Index, Key);
 	Key[KeyLength] = 0;
 	return Key;
 }
@@ -186,8 +190,8 @@ typedef struct {
 	int Created;
 } string_index_result_t;
 
-string_index_result_t string_index_insert2(string_index_t *Store, const char *Key) {
-	size_t Length = strlen(Key);
+string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
+	if (!Length) Length = strlen(Key);
 	uint32_t Hash = hash(Key);
 	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
@@ -284,12 +288,12 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 	return (string_index_result_t){INVALID_INDEX, 0};
 }
 
-size_t string_index_insert(string_index_t *Store, const char *Key) {
-	return string_index_insert2(Store, Key).Index;
+size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length) {
+	return string_index_insert2(Store, Key, Length).Index;
 }
 
-size_t string_index_search(string_index_t *Store, const char *Key) {
-	size_t Length = strlen(Key);
+size_t string_index_search(string_index_t *Store, const char *Key, size_t Length) {
+	if (!Length) Length = strlen(Key);
 	uint32_t Hash = hash(Key);
 	unsigned int Mask = Store->Header->Size - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
@@ -309,6 +313,6 @@ size_t string_index_search(string_index_t *Store, const char *Key) {
 	return INVALID_INDEX;
 }
 
-size_t string_index_delete(string_index_t *Store, const char *Key) {
+size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length) {
 	return 0;
 }

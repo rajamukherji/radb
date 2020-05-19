@@ -144,12 +144,12 @@ size_t string_store_num_entries(string_store_t *Store) {
 	return Store->Header->NumEntries;
 }
 
-size_t string_store_get_size(string_store_t *Store, size_t Index) {
+size_t string_store_size(string_store_t *Store, size_t Index) {
 	if (Index >= Store->Header->NumEntries) return 0;
 	return Store->Header->Entries[Index].Length;
 }
 
-void string_store_get_value(string_store_t *Store, size_t Index, void *Buffer) {
+void string_store_get(string_store_t *Store, size_t Index, void *Buffer) {
 	if (Index >= Store->Header->NumEntries) return;
 	size_t Length = Store->Header->Entries[Index].Length;
 	size_t Link = Store->Header->Entries[Index].Link;
