@@ -72,7 +72,7 @@ install_lib = $(DESTDIR)$(PREFIX)/lib
 
 install_h = \
 	$(install_include)/radb.h \
-	$(install_include)/context.h \
+	$(install_include)/common.h \
 	$(install_include)/string_store.h \
 	$(install_include)/string_index.h \
 	$(install_include)/fixed_store.h \
