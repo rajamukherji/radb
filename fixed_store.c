@@ -21,9 +21,10 @@ typedef struct header_t {
 
 struct fixed_store_t {
 #ifdef RADB_MEM_PER_STORE
-	void *(*alloc)(size_t);
-	void *(*alloc_atomic)(size_t);
-	void (*free)(void *);
+	void *Allocator;
+	void *(*alloc)(void *, size_t);
+	void *(*alloc_atomic)(void *, size_t);
+	void (*free)(void *, void *);
 #endif
 	const char *Prefix;
 	header_t *Header;
@@ -32,9 +33,9 @@ struct fixed_store_t {
 };
 
 #ifdef RADB_MEM_PER_STORE
-static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+static inline const char *radb_strdup(const char *String, void *Allocator, void *(*alloc_atomic)(void *, size_t)) {
 	size_t Length = strlen(String);
-	char *Copy = alloc_atomic(Length + 1);
+	char *Copy = alloc_atomic(Allocator, Length + 1);
 	strcpy(Copy, String);
 	return Copy;
 }
@@ -48,13 +49,14 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	fixed_store_t *Store = GC_malloc(sizeof(fixed_store_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	fixed_store_t *Store = alloc(sizeof(fixed_store_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	fixed_store_t *Store = alloc(Allocator, sizeof(fixed_store_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	uint32_t NodeSize = ((RequestedSize + 15) / 16) * 16;
+	uint32_t NodeSize = ((RequestedSize + 7) / 8) * 8;
 	if (!ChunkSize) ChunkSize = 512;
 	int NumEntries = (ChunkSize - sizeof(header_t) + NodeSize - 1) / NodeSize;
 	char FileName[strlen(Prefix) + 10];
@@ -84,8 +86,9 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	fixed_store_t *Store = GC_malloc(sizeof(fixed_store_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	fixed_store_t *Store = alloc(sizeof(fixed_store_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	fixed_store_t *Store = alloc(Allocator, sizeof(fixed_store_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
@@ -105,9 +108,13 @@ void fixed_store_close(fixed_store_t *Store) {
 	free(Store);
 #elif defined(RADB_MEM_GC)
 #else
-	Store->free((void *)Store->Prefix);
-	Store->free(Store);
+	Store->free(Store->Allocator, (void *)Store->Prefix);
+	Store->free(Store->Allocator, Store);
 #endif
+}
+
+size_t fixed_store_num_entries(fixed_store_t *Store) {
+	return Store->Header->NumEntries;
 }
 
 void *fixed_store_get(fixed_store_t *Store, size_t Index) {

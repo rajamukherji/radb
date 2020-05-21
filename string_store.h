@@ -1,7 +1,7 @@
 #ifndef STRING_STORE_H
 #define STRING_STORE_H
 
-#include "common.h"
+#include "config.h"
 
 #include <stddef.h>
 

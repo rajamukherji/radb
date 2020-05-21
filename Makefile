@@ -20,11 +20,14 @@ else
 endif
 
 ifeq ($(RADB_MEM), MALLOC)
-	CFLAGS += -DRADB_MEM_MALLOC
+config.h: config.h.in
+	sed 's/RADB_MEM_MODE/RADB_MEM_MALLOC/g' config.h.in > config.h
 else ifeq ($(RADB_MEM), GC)
-	CFLAGS += -DRADB_MEM_GC
+config.h: config.h.in
+	sed 's/RADB_MEM_MODE/RADB_MEM_GC/g' config.h.in > config.h
 else
-	CFLAGS += -DRADB_MEM_PER_STORE
+config.h: config.h.in
+	sed 's/RADB_MEM_MODE/RADB_MEM_PER_STORE/g' config.h.in > config.h
 endif
 
 common_objects = \
@@ -56,6 +59,8 @@ ifeq ($(PLATFORM), Darwin)
 	LDFLAGS += -lgc
 endif
 
+$(common_objects): config.h
+
 libradb.a: $(common_objects) $(platform_objects)
 	ar rcs $@ $(common_objects) $(platform_objects)
 
@@ -63,6 +68,7 @@ radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a
 	$(CC) radb.o $(LDFLAGS) -o$@ -lradb -lminilang
 
 clean:
+	rm -f config.h
 	rm -f *.o
 	rm -f libradb.a
 
@@ -72,7 +78,7 @@ install_lib = $(DESTDIR)$(PREFIX)/lib
 
 install_h = \
 	$(install_include)/radb.h \
-	$(install_include)/common.h \
+	$(install_include)/config.h \
 	$(install_include)/string_store.h \
 	$(install_include)/string_index.h \
 	$(install_include)/fixed_store.h \

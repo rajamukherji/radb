@@ -26,9 +26,10 @@ typedef struct header_t {
 
 struct string_store_t {
 #ifdef RADB_MEM_PER_STORE
-	void *(*alloc)(size_t);
-	void *(*alloc_atomic)(size_t);
-	void (*free)(void *);
+	void *Allocator;
+	void *(*alloc)(void *, size_t);
+	void *(*alloc_atomic)(void *, size_t);
+	void (*free)(void *, void *);
 #endif
 	const char *Prefix;
 	header_t *Header;
@@ -40,9 +41,9 @@ struct string_store_t {
 #define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
 
 #ifdef RADB_MEM_PER_STORE
-static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+static inline const char *radb_strdup(const char *String, void *Allocator, void *(*alloc_atomic)(void *, size_t)) {
 	size_t Length = strlen(String);
-	char *Copy = alloc_atomic(Length + 1);
+	char *Copy = alloc_atomic(Allocator, Length + 1);
 	strcpy(Copy, String);
 	return Copy;
 }
@@ -56,8 +57,9 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	string_store_t *Store = GC_malloc(sizeof(string_store_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_store_t *Store = alloc(sizeof(string_store_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	string_store_t *Store = alloc(Allocator, sizeof(string_store_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
@@ -108,8 +110,9 @@ string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	string_store_t *Store = GC_malloc(sizeof(string_store_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_store_t *Store = alloc(sizeof(string_store_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	string_store_t *Store = alloc(Allocator, sizeof(string_store_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
@@ -135,8 +138,8 @@ void string_store_close(string_store_t *Store) {
 	free(Store);
 #elif defined(RADB_MEM_GC)
 #else
-	Store->free((void *)Store->Prefix);
-	Store->free(Store);
+	Store->free(Store->Allocator, (void *)Store->Prefix);
+	Store->free(Store->Allocator, Store);
 #endif
 }
 

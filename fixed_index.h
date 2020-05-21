@@ -1,7 +1,7 @@
 #ifndef FIXED_INDEX_H
 #define FIXED_INDEX_H
 
-#include "common.h"
+#include "config.h"
 
 #include <stddef.h>
 

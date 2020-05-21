@@ -26,9 +26,10 @@ typedef struct header_t {
 
 struct string_index_t {
 #ifdef RADB_MEM_PER_STORE
-	void *(*alloc)(size_t);
-	void *(*alloc_atomic)(size_t);
-	void (*free)(void *);
+	void *Allocator;
+	void *(*alloc)(void *, size_t);
+	void *(*alloc_atomic)(void *, size_t);
+	void (*free)(void *, void *);
 #endif
 	const char *Prefix;
 	header_t *Header;
@@ -39,9 +40,9 @@ struct string_index_t {
 };
 
 #ifdef RADB_MEM_PER_STORE
-static inline const char *radb_strdup(const char *String, void *(*alloc_atomic)(size_t)) {
+static inline const char *radb_strdup(const char *String, void *Allocator, void *(*alloc_atomic)(void *, size_t)) {
 	size_t Length = strlen(String);
-	char *Copy = alloc_atomic(Length + 1);
+	char *Copy = alloc_atomic(Allocator, Length + 1);
 	strcpy(Copy, String);
 	return Copy;
 }
@@ -55,8 +56,9 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	string_index_t *Store = GC_malloc(sizeof(string_index_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_index_t *Store = alloc(sizeof(string_index_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	string_index_t *Store = alloc(Allocator, sizeof(string_index_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
@@ -89,8 +91,9 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	string_index_t *Store = GC_malloc(sizeof(string_index_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_index_t *Store = alloc(sizeof(string_index_t));
-	Store->Prefix = radb_strdup(Prefix, alloc_atomic);
+	string_index_t *Store = alloc(Allocator, sizeof(string_index_t));
+	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
+	Store->Allocator = Allocator;
 	Store->alloc = alloc;
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
@@ -114,8 +117,8 @@ void string_index_close(string_index_t *Store) {
 	free(Store);
 #elif defined(RADB_MEM_GC)
 #else
-	Store->free((void *)Store->Prefix);
-	Store->free(Store);
+	Store->free(Store->Allocator, (void *)Store->Prefix);
+	Store->free(Store->Allocator, Store);
 #endif
 }
 
@@ -134,18 +137,8 @@ size_t string_index_size(string_index_t *Store, size_t Index) {
 	return string_store_size(Store->Keys, Index);
 }
 
-const char *string_index_get(string_index_t *Store, size_t Index) {
-	size_t KeyLength = string_store_size(Store->Keys, Index);
-#if defined(RADB_MEM_MALLOC)
-	char *Key = malloc(KeyLength + 1);
-#elif defined(RADB_MEM_GC)
-	char *Key = GC_malloc_atomic(KeyLength + 1);
-#else
-	char *Key = Store->alloc_atomic(KeyLength + 1);
-#endif
-	string_store_get(Store->Keys, Index, Key);
-	Key[KeyLength] = 0;
-	return Key;
+void string_index_get(string_index_t *Store, size_t Index, void *Buffer) {
+	string_store_get(Store->Keys, Index, Buffer);
 }
 
 static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
@@ -184,11 +177,6 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	if (First < A - 1) sort_hashes(Store, First, A - 1);
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
-
-typedef struct {
-	size_t Index;
-	int Created;
-} string_index_result_t;
 
 string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
