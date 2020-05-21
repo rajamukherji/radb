@@ -12,3 +12,4 @@ libradb.a
 /.cproject
 /.project
 /.settings/
+/config.h
