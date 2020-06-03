@@ -20,8 +20,8 @@ typedef struct hash_t {
 
 #define VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
 
-static uint32_t Signature = 0x49534152;
-static uint32_t Version = VERSION(1, 0);
+static const uint32_t Signature = 0x49534152;
+static const uint32_t Version = VERSION(1, 0);
 
 typedef struct header_t {
 	uint32_t Signature, Version;
