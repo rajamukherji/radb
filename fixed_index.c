@@ -111,7 +111,7 @@ fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != SIGNATURE) {
-		fputs("Header mismatch - aborting", stderr);
+		puts("Header mismatch - aborting");
 		exit(1);
 	}
 	Store->Keys = fixed_store_open(Prefix RADB_MEM_ARGS);
