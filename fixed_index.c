@@ -18,10 +18,10 @@ typedef struct hash_t {
 	uint32_t Link;
 } hash_t;
 
-#define VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
+#define MAKE_VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
 
-static const uint32_t Signature = 0x49464152;
-static const uint32_t Version = VERSION(1, 0);
+#define SIGNATURE 0x49464152
+#define VERSION MAKE_VERSION(1, 0)
 
 typedef struct header_t {
 	uint32_t Signature, Version;
@@ -77,8 +77,8 @@ fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t Chu
 	Store->HeaderSize = sizeof(header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	Store->Header->Signature = Signature;
-	Store->Header->Version = Version;
+	Store->Header->Signature = SIGNATURE;
+	Store->Header->Version = VERSION;
 	Store->Header->Size = Store->Header->Space = 64;
 	Store->Header->KeySize = KeySize;
 	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
@@ -110,7 +110,7 @@ fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	if (Store->Header->Signature != Signature) {
+	if (Store->Header->Signature != SIGNATURE) {
 		fputs("Header mismatch - aborting", stderr);
 		exit(1);
 	}
@@ -261,8 +261,8 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
 		ftruncate(HeaderFd, HeaderSize);
 		header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
-		Header->Signature = Signature;
-		Header->Version = Version;
+		Header->Signature = SIGNATURE;
+		Header->Version = VERSION;
 		Header->Size = HashSize;
 		Header->Space = Store->Header->Space + Store->Header->Size;
 		Header->KeySize = Store->Header->KeySize;
