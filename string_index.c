@@ -148,8 +148,8 @@ size_t string_index_size(string_index_t *Store, size_t Index) {
 	return string_store_size(Store->Keys, Index);
 }
 
-void string_index_get(string_index_t *Store, size_t Index, void *Buffer) {
-	string_store_get(Store->Keys, Index, Buffer);
+size_t string_index_get(string_index_t *Store, size_t Index, void *Buffer, size_t Space) {
+	return string_store_get(Store->Keys, Index, Buffer, Space);
 }
 
 static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {

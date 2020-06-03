@@ -25,7 +25,7 @@ typedef struct {
 string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length);
 
 size_t string_index_size(string_index_t *Store, size_t Index);
-void string_index_get(string_index_t *Store, size_t Index, void *Buffer);
+size_t string_index_get(string_index_t *Store, size_t Index, void *Buffer, size_t Space);
 size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length);
 
 #endif

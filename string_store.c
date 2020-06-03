@@ -164,19 +164,26 @@ size_t string_store_size(string_store_t *Store, size_t Index) {
 	return Store->Header->Entries[Index].Length;
 }
 
-void string_store_get(string_store_t *Store, size_t Index, void *Buffer) {
-	if (Index >= Store->Header->NumEntries) return;
+size_t string_store_get(string_store_t *Store, size_t Index, void *Buffer, size_t Space) {
+	if (Index >= Store->Header->NumEntries) return 0;
 	size_t Length = Store->Header->Entries[Index].Length;
 	size_t Link = Store->Header->Entries[Index].Link;
 	size_t NodeSize = Store->Header->NodeSize;
 	void *Node = Store->Data + Link * NodeSize;
+	size_t Total = (Space < Length) ? Space : Length;
 	while (Length > NodeSize) {
+		if (Space < NodeSize - 4) {
+			memcpy(Buffer, Node, Space);
+			return Total;
+		}
 		memcpy(Buffer, Node, NodeSize - 4);
 		Buffer += NodeSize - 4;
 		Length -= NodeSize - 4;
+		Space -= NodeSize - 4;
 		Node = Store->Data + NodeSize * NODE_LINK(Node);
 	}
-	memcpy(Buffer, Node, Length);
+	memcpy(Buffer, Node, (Space < Length) ? Space : Length);
+	return Total;
 }
 
 int string_store_compare(string_store_t *Store, const void *Other, size_t Length, size_t Index) {
