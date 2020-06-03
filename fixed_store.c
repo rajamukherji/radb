@@ -13,7 +13,13 @@
 #include <gc/gc.h>
 #endif
 
+#define VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
+
+static uint32_t Signature = 0x53464152;
+static uint32_t Version = VERSION(1, 0);
+
 typedef struct header_t {
+	uint32_t Signature, Version;
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, FreeEntry;
 	char Nodes[];
@@ -65,6 +71,8 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	Store->HeaderSize = sizeof(header_t) + NumEntries * NodeSize;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	Store->Header->Signature = Signature;
+	Store->Header->Version = Version;
 	Store->Header->NodeSize = NodeSize;
 	Store->Header->ChunkSize = (ChunkSize + NodeSize - 1) / NodeSize;
 	Store->Header->NumEntries = NumEntries;
@@ -96,6 +104,10 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	if (Store->Header->Signature != Signature) {
+		fputs("Header mismatch - aborting", stderr);
+		exit(1);
+	}
 	return Store;
 }
 

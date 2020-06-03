@@ -17,7 +17,13 @@ typedef struct entry_t {
 	uint32_t Link, Length;
 } entry_t;
 
+#define VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
+
+static uint32_t Signature = 0x53534152;
+static uint32_t Version = VERSION(1, 0);
+
 typedef struct header_t {
+	uint32_t Signature, Version;
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;
 	uint32_t FreeEntry, Reserved;
@@ -75,6 +81,8 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	Store->HeaderSize = sizeof(header_t) + NumEntries * sizeof(entry_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	Store->Header->Signature = Signature;
+	Store->Header->Version = Version;
 	Store->Header->NodeSize = NodeSize;
 	Store->Header->ChunkSize = NumNodes;
 	Store->Header->NumEntries = NumEntries;
@@ -120,6 +128,10 @@ string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+	if (Store->Header->Signature != Signature) {
+		fputs("Header mismatch - aborting", stderr);
+		exit(1);
+	}
 	sprintf(FileName, "%s.data", Prefix);
 	Store->DataFd = open(FileName, O_RDWR, 0777);
 	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
