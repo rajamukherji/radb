@@ -1,0 +1,24 @@
+#ifndef RADB_CONFIG_H
+#define RADB_CONFIG_H
+
+#define RADB_MEM_MODE
+
+#ifdef RADB_MEM_PER_STORE
+
+#define RADB_MEM_PARAMS \
+	, void *Allocator \
+	, void *(*alloc)(void *, size_t) \
+	, void *(*alloc_atomic)(void *, size_t) \
+	, void (*free)(void *, void *)
+
+#define RADB_MEM_ARGS \
+	, Allocator, alloc, alloc_atomic, free
+
+#else
+
+#define RADB_MEM_PARAMS
+#define RADB_MEM_ARGS
+
+#endif
+
+#endif

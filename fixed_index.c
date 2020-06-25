@@ -1,5 +1,5 @@
-#include "string_index.h"
-#include "string_store.h"
+#include "fixed_index.h"
+#include "fixed_store.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,16 +20,17 @@ typedef struct hash_t {
 
 #define MAKE_VERSION(MAJOR, MINOR) (0xFF000000 + (MAJOR << 16) + (MINOR << 8))
 
-#define SIGNATURE 0x49534152
+#define SIGNATURE 0x49464152
 #define VERSION MAKE_VERSION(1, 0)
 
 typedef struct header_t {
 	uint32_t Signature, Version;
 	uint32_t Size, Space;
+	uint32_t KeySize, Reserved1;
 	hash_t Hashes[];
 } header_t;
 
-struct string_index_t {
+struct fixed_index_t {
 #ifdef RADB_MEM_PER_STORE
 	void *Allocator;
 	void *(*alloc)(void *, size_t);
@@ -38,7 +39,7 @@ struct string_index_t {
 #endif
 	const char *Prefix;
 	header_t *Header;
-	string_store_t *Keys;
+	fixed_store_t *Keys;
 	size_t HeaderSize;
 	int HeaderFd;
 	int SyncCounter;
@@ -53,15 +54,15 @@ static inline const char *radb_strdup(const char *String, void *Allocator, void 
 }
 #endif
 
-string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS) {
+fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS) {
 #if defined(RADB_MEM_MALLOC)
-	string_index_t *Store = malloc(sizeof(string_index_t));
+	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
 	Store->Prefix = strdup(Prefix);
 #elif defined(RADB_MEM_GC)
-	string_index_t *Store = GC_malloc(sizeof(string_index_t));
+	fixed_index_t *Store = GC_malloc(sizeof(fixed_index_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_index_t *Store = alloc(Allocator, sizeof(string_index_t));
+	fixed_index_t *Store = alloc(Allocator, sizeof(fixed_index_t));
 	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
 	Store->Allocator = Allocator;
 	Store->alloc = alloc;
@@ -79,26 +80,27 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	Store->Header->Signature = SIGNATURE;
 	Store->Header->Version = VERSION;
 	Store->Header->Size = Store->Header->Space = 64;
+	Store->Header->KeySize = KeySize;
 	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
-	Store->Keys = string_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
+	Store->Keys = fixed_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
 	//msync(Index->Header, Index->HeaderSize, MS_ASYNC);
 	//msync(Index->Hashes, Index->Header->HashSize * sizeof(hash_t), MS_ASYNC);
 	return Store;
 }
 
-string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
+fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return NULL;
 #if defined(RADB_MEM_MALLOC)
-	string_index_t *Store = malloc(sizeof(string_index_t));
+	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
 	Store->Prefix = strdup(Prefix);
 #elif defined(RADB_MEM_GC)
-	string_index_t *Store = GC_malloc(sizeof(string_index_t));
+	fixed_index_t *Store = GC_malloc(sizeof(fixed_index_t));
 	Store->Prefix = GC_strdup(Prefix);
 #else
-	string_index_t *Store = alloc(Allocator, sizeof(string_index_t));
+	fixed_index_t *Store = alloc(Allocator, sizeof(fixed_index_t));
 	Store->Prefix = radb_strdup(Prefix, Allocator, alloc_atomic);
 	Store->Allocator = Allocator;
 	Store->alloc = alloc;
@@ -112,15 +114,15 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 		puts("Header mismatch - aborting");
 		exit(1);
 	}
-	Store->Keys = string_store_open(Prefix RADB_MEM_ARGS);
+	Store->Keys = fixed_store_open(Prefix RADB_MEM_ARGS);
 	return Store;
 }
 
-void string_index_close(string_index_t *Store) {
+void fixed_index_close(fixed_index_t *Store) {
 	//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
 	//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
 	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
-	string_store_close(Store->Keys);
+	fixed_store_close(Store->Keys);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
@@ -140,19 +142,15 @@ static uint32_t hash(const char *Key, int Length) {
 	return Hash;
 }
 
-size_t string_index_count(string_index_t *Store) {
+size_t fixed_index_count(fixed_index_t *Store) {
 	return Store->Header->Size - Store->Header->Space;
 }
 
-size_t string_index_size(string_index_t *Store, size_t Index) {
-	return string_store_size(Store->Keys, Index);
+const void *fixed_index_get(fixed_index_t *Store, size_t Index) {
+	return fixed_store_get(Store->Keys, Index);
 }
 
-size_t string_index_get(string_index_t *Store, size_t Index, void *Buffer, size_t Space) {
-	return string_store_get(Store->Keys, Index, Buffer, Space);
-}
-
-static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
+static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	hash_t *A = First;
 	hash_t *B = Last;
 	hash_t T = *A;
@@ -171,7 +169,9 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 			} else if (T.Hash > P.Hash) {
 				Cmp = 1;
 			} else {
-				Cmp = string_store_compare2(Store->Keys, T.Link, P.Link);
+				const void *TKey = fixed_store_get(Store->Keys, T.Link);
+				const void *PKey = fixed_store_get(Store->Keys, P.Link);
+				Cmp = memcmp(TKey, PKey, Store->Header->KeySize);
 			}
 		} else {
 			Cmp = -1;
@@ -189,9 +189,13 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
-	if (!Length) Length = strlen(Key);
-	uint32_t Hash = hash(Key, Length);
+typedef struct {
+	size_t Index;
+	int Created;
+} fixed_index_result_t;
+
+fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
+	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
 		unsigned int Incr = ((Hash >> 8) | 1) & Mask;
@@ -201,9 +205,10 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 			if (Hashes[Index].Link == INVALID_INDEX) break;
 			if (Hashes[Index].Hash < Hash) break;
 			if (Hashes[Index].Hash == Hash) {
-				int Cmp = string_store_compare(Store->Keys, Key, Length, Hashes[Index].Link);
+				const void *HKey = fixed_store_get(Store->Keys, Hashes[Index].Link);
+				int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
 				if (Cmp < 0) break;
-				if (Cmp == 0) return (string_index_result_t){Hashes[Index].Link, 0};
+				if (Cmp == 0) return (fixed_index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
 			Index &= Mask;
@@ -211,8 +216,8 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		size_t Space = Store->Header->Space;
 		if (--Space > Store->Header->Size >> 3) {
 			Store->Header->Space = Space;
-			uint32_t Result = string_store_alloc(Store->Keys);
-			string_store_set(Store->Keys, Result, Key, Length);
+			uint32_t Result = fixed_store_alloc(Store->Keys);
+			memcpy(fixed_store_get(Store->Keys, Result), Key, Store->Header->KeySize);
 			hash_t Old = Hashes[Index];
 			Hashes[Index].Link = Result;
 			Hashes[Index].Hash = Hash;
@@ -224,14 +229,16 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return (string_index_result_t){Result, 1};
+						return (fixed_index_result_t){Result, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
 						Old = New;
 						break;
 					} else if (Hashes[Index].Hash == Old.Hash) {
-						int Cmp = string_store_compare2(Store->Keys, Hashes[Index].Link, Old.Link);
+						const void *HKey = fixed_store_get(Store->Keys, Hashes[Index].Link);
+						const void *OKey = fixed_store_get(Store->Keys, Old.Link);
+						int Cmp = memcmp(HKey, OKey, Store->Header->KeySize);
 						if (Cmp < 0) {
 							hash_t New = Hashes[Index];
 							Hashes[Index] = Old;
@@ -242,7 +249,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return (string_index_result_t){Result, 1};
+			return (fixed_index_result_t){Result, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
 		Mask = HashSize - 1;
@@ -258,6 +265,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		Header->Version = VERSION;
 		Header->Size = HashSize;
 		Header->Space = Store->Header->Space + Store->Header->Size;
+		Header->KeySize = Store->Header->KeySize;
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
 		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
@@ -286,16 +294,15 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
 
-	return (string_index_result_t){INVALID_INDEX, 0};
+	return (fixed_index_result_t){INVALID_INDEX, 0};
 }
 
-size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length) {
-	return string_index_insert2(Store, Key, Length).Index;
+size_t fixed_index_insert(fixed_index_t *Store, const char *Key) {
+	return fixed_index_insert2(Store, Key).Index;
 }
 
-size_t string_index_search(string_index_t *Store, const char *Key, size_t Length) {
-	if (!Length) Length = strlen(Key);
-	uint32_t Hash = hash(Key, Length);
+size_t fixed_index_search(fixed_index_t *Store, const char *Key) {
+	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
 	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
 	unsigned int Index = Hash & Mask;
@@ -304,7 +311,8 @@ size_t string_index_search(string_index_t *Store, const char *Key, size_t Length
 		if (Hashes[Index].Link == INVALID_INDEX) break;
 		if (Hashes[Index].Hash < Hash) break;
 		if (Hashes[Index].Hash == Hash) {
-			int Cmp = string_store_compare(Store->Keys, Key, Length, Hashes[Index].Link);
+			const void *HKey = fixed_store_get(Store->Keys, Hashes[Index].Link);
+			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
 			if (Cmp < 0) break;
 			if (Cmp == 0) return Hashes[Index].Link;
 		}
@@ -314,6 +322,6 @@ size_t string_index_search(string_index_t *Store, const char *Key, size_t Length
 	return INVALID_INDEX;
 }
 
-size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length) {
+size_t fixed_index_delete(fixed_index_t *Store, const char *Key) {
 	return 0;
 }
