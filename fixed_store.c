@@ -62,7 +62,16 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	uint32_t NodeSize = ((RequestedSize + 7) / 8) * 8;
+	uint32_t NodeSize;
+	if (RequestedSize == 1) {
+		NodeSize = 1;
+	} else if (RequestedSize == 2) {
+		NodeSize = 2;
+	} else if (RequestedSize <= 4) {
+		NodeSize = 4;
+	} else {
+		NodeSize = ((RequestedSize + 7) / 8) * 8;
+	}
 	if (!ChunkSize) ChunkSize = 512;
 	int NumEntries = (ChunkSize - sizeof(header_t) + NodeSize - 1) / NodeSize;
 	char FileName[strlen(Prefix) + 10];
