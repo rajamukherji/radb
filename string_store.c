@@ -509,30 +509,32 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 		Space = Writer->Remain;
 		Offset = NodeSize - Space;
 	}
-	if (Space < 4) {
-		void *Node = Store->Data + NodeSize * NodeIndex;
-		uint32_t Save = NODE_LINK(Node);
-		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
-		Node = Store->Data + NodeSize * NodeIndex;
-		NODE_LINK(Node) = NewIndex;
-		NodeIndex = NewIndex;
-		*(uint32_t *)Node = Save;
-		Offset = 4 - Space;
-		Space += NodeSize - 4;
-	}
-	while (Remain > Space) {
-		void *Node = Store->Data + NodeSize * NodeIndex;
-		memcpy(Node + Offset, Buffer, Space - 4);
-		Buffer += Space - 4;
-		Remain -= Space - 4;
-		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
-		Node = Store->Data + NodeSize * NodeIndex;
-		NODE_LINK(Node) = NewIndex;
-		NodeIndex = NewIndex;
-		Offset = 0;
-		Space = NodeSize - 4;
-	}
 	void *Node = Store->Data + NodeSize * NodeIndex;
+	if (Remain > Space) {
+		if (Space < 4) {
+			uint32_t Save = NODE_LINK(Node);
+			size_t NewIndex = string_store_node_alloc(Store, NodeSize);
+			Node = Store->Data + NodeSize * NodeIndex;
+			NODE_LINK(Node) = NewIndex;
+			NodeIndex = NewIndex;
+			Node = Store->Data + NodeSize * NodeIndex;
+			*(uint32_t *)Node = Save;
+			Offset = 4 - Space;
+			Space = NodeSize - Offset;
+		}
+		while (Remain > Space) {
+			memcpy(Node + Offset, Buffer, Space - 4);
+			Buffer += Space - 4;
+			Remain -= Space - 4;
+			size_t NewIndex = string_store_node_alloc(Store, NodeSize);
+			Node = Store->Data + NodeSize * NodeIndex;
+			NODE_LINK(Node) = NewIndex;
+			NodeIndex = NewIndex;
+			Node = Store->Data + NodeSize * NodeIndex;
+			Offset = 0;
+			Space = NodeSize - 4;
+		}
+	}
 	memcpy(Node + Offset, Buffer, Remain);
 	Writer->Node = NodeIndex;
 	Writer->Remain = Space - Remain;
@@ -580,7 +582,6 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 			} else {
 				memcpy(Buffer, Node + Offset, Available);
 				NodeIndex = NODE_LINK(Node);
-				Node = Store->Data + NodeSize * NodeIndex;
 				Offset = 0;
 				Remain -= Available;
 				Copied += Available;
