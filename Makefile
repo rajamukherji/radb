@@ -3,7 +3,7 @@
 PLATFORM = $(shell uname)
 MACHINE = $(shell uname -m)
 
-all: libradb.a radb
+all: libradb.a
 
 *.o: *.h
 
@@ -63,9 +63,6 @@ $(common_objects): config.h
 
 libradb.a: $(common_objects) $(platform_objects)
 	ar rcs $@ $(common_objects) $(platform_objects)
-
-radb: Makefile *.h radb.o libradb.a ../minilang/libminilang.a
-	$(CC) radb.o $(LDFLAGS) -o$@ -lradb -lminilang
 
 clean:
 	rm -f config.h

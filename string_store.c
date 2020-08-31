@@ -461,7 +461,7 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 		Store->Header->FreeNode = FreeStart;
 	}
 	Writer->Store = Store;
-	Writer->Node = 0;
+	Writer->Node = SIZE_MAX;
 	Writer->Index = Index;
 	Store->Header->Entries[Index].Length = 0;
 	Store->Header->Entries[Index].Link = INVALID_INDEX;
@@ -498,12 +498,11 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 	string_store_t *Store = Writer->Store;
 	Store->Header->Entries[Writer->Index].Length += Length;
 	size_t NodeSize = Store->Header->NodeSize;
-	void *Node = Writer->Node;
+	size_t NodeIndex = Writer->Node;
 	size_t Remain = Length, Offset, Space;
-	if (!Node) {
-		size_t Index = string_store_node_alloc(Store, NodeSize);
-		Store->Header->Entries[Writer->Index].Link = Index;
-		Node = Store->Data + NodeSize * Index;
+	if (NodeIndex == SIZE_MAX) {
+		NodeIndex = string_store_node_alloc(Store, NodeSize);
+		Store->Header->Entries[Writer->Index].Link = NodeIndex;
 		Space = NodeSize;
 		Offset = 0;
 	} else {
@@ -511,33 +510,38 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 		Offset = NodeSize - Space;
 	}
 	if (Space < 4) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
 		uint32_t Save = NODE_LINK(Node);
-		size_t Index = string_store_node_alloc(Store, NodeSize);
-		NODE_LINK(Node) = Index;
-		Node = Store->Data + NodeSize * Index;
+		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
+		Node = Store->Data + NodeSize * NodeIndex;
+		NODE_LINK(Node) = NewIndex;
+		NodeIndex = NewIndex;
 		*(uint32_t *)Node = Save;
 		Offset = 4 - Space;
 		Space += NodeSize - 4;
 	}
 	while (Remain > Space) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
 		memcpy(Node + Offset, Buffer, Space - 4);
 		Buffer += Space - 4;
 		Remain -= Space - 4;
-		size_t Index = string_store_node_alloc(Store, NodeSize);
-		NODE_LINK(Node) = Index;
-		Node = Store->Data + NodeSize * Index;
+		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
+		Node = Store->Data + NodeSize * NodeIndex;
+		NODE_LINK(Node) = NewIndex;
+		NodeIndex = NewIndex;
 		Offset = 0;
 		Space = NodeSize - 4;
 	}
+	void *Node = Store->Data + NodeSize * NodeIndex;
 	memcpy(Node + Offset, Buffer, Remain);
-	Writer->Node = Node;
+	Writer->Node = NodeIndex;
 	Writer->Remain = Space - Remain;
 	return Length;
 }
 
 void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Store, size_t Index) {
 	Reader->Store = Store;
-	Reader->Node = Store->Data + Store->Header->NodeSize * Store->Header->Entries[Index].Link;
+	Reader->Node = Store->Header->Entries[Index].Link;
 	Reader->Offset = 0;
 	Reader->Remain = Store->Header->Entries[Index].Length;
 }
@@ -545,36 +549,38 @@ void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Sto
 size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, size_t Length) {
 	string_store_t *Store = Reader->Store;
 	size_t NodeSize = Store->Header->NodeSize;
-	void *Node = Reader->Node;
-	if (!Node) return 0;
+	size_t NodeIndex = Reader->Node;
+	if (NodeIndex == SIZE_MAX) return 0;
 	size_t Offset = Reader->Offset;
 	size_t Remain = Reader->Remain;
 	size_t Copied = 0;
 	for (;;) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
 		if (Offset + Remain <= NodeSize) {
 			// Last node
 			if (Length < Remain) {
 				memcpy(Buffer, Node + Offset, Length);
-				Reader->Node = Node;
+				Reader->Node = NodeIndex;
 				Reader->Offset = Offset + Length;
 				Reader->Remain = Remain - Length;
 				return Copied + Length;
 			} else {
 				memcpy(Buffer, Node + Offset, Remain);
-				Reader->Node = 0;
+				Reader->Node = SIZE_MAX;
 				return Copied + Remain;
 			}
 		} else {
 			size_t Available = NodeSize - Offset - 4;
 			if (Length < Available) {
 				memcpy(Buffer, Node + Offset, Length);
-				Reader->Node = Node;
+				Reader->Node = NodeIndex;
 				Reader->Offset = Offset + Length;
 				Reader->Remain = Remain - Length;
 				return Copied + Length;
 			} else {
 				memcpy(Buffer, Node + Offset, Available);
-				Node = Store->Data + NodeSize * NODE_LINK(Node);
+				NodeIndex = NODE_LINK(Node);
+				Node = Store->Data + NodeSize * NodeIndex;
 				Offset = 0;
 				Remain -= Available;
 				Copied += Available;
