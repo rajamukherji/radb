@@ -560,7 +560,7 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 		void *Node = Store->Data + NodeSize * NodeIndex;
 		if (Offset + Remain <= NodeSize) {
 			// Last node
-			if (Length < Remain) {
+			if (Length <= Remain) {
 				memcpy(Buffer, Node + Offset, Length);
 				Reader->Node = NodeIndex;
 				Reader->Offset = Offset + Length;
@@ -573,7 +573,7 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 			}
 		} else {
 			size_t Available = NodeSize - Offset - 4;
-			if (Length < Available) {
+			if (Length <= Available) {
 				memcpy(Buffer, Node + Offset, Length);
 				Reader->Node = NodeIndex;
 				Reader->Offset = Offset + Length;
