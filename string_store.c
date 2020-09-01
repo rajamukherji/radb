@@ -532,7 +532,7 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 			NodeIndex = NewIndex;
 			Node = Store->Data + NodeSize * NodeIndex;
 			Offset = 0;
-			Space = NodeSize - 4;
+			Space = NodeSize;
 		}
 	}
 	memcpy(Node + Offset, Buffer, Remain);
