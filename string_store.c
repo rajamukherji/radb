@@ -511,7 +511,7 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 	}
 	void *Node = Store->Data + NodeSize * NodeIndex;
 	if (Remain > Space) {
-		if (Space < 4) {
+		if (Space <= 4) {
 			uint32_t Save = NODE_LINK(Node);
 			size_t NewIndex = string_store_node_alloc(Store, NodeSize);
 			Node = Store->Data + NodeSize * NodeIndex;
