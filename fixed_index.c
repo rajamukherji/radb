@@ -191,11 +191,6 @@ static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-typedef struct {
-	size_t Index;
-	int Created;
-} fixed_index_result_t;
-
 fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
