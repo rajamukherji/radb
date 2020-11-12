@@ -543,9 +543,14 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 
 void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Store, size_t Index) {
 	Reader->Store = Store;
-	Reader->Node = Store->Header->Entries[Index].Link;
 	Reader->Offset = 0;
-	Reader->Remain = Store->Header->Entries[Index].Length;
+	if (Index >= Store->Header->NumEntries) {
+		Reader->Node = INVALID_INDEX;
+		Reader->Remain = 0;
+	} else {
+		Reader->Node = Store->Header->Entries[Index].Link;
+		Reader->Remain = Store->Header->Entries[Index].Length;
+	}
 }
 
 size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, size_t Length) {
