@@ -449,7 +449,6 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 		Store->HeaderSize = HeaderSize;
 	}
 	size_t OldLength = Store->Header->Entries[Index].Length;
-	if (OldLength == INVALID_INDEX) return;
 	size_t NodeSize = Store->Header->NodeSize;
 	size_t OldNumBlocks = (OldLength > NodeSize) ? 1 + (OldLength - 5) / (NodeSize - 4) : (OldLength != 0);
 	if (OldNumBlocks > 0) {
