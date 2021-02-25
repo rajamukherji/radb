@@ -55,7 +55,7 @@ endif
 $(common_objects): config.h
 
 libradb.a: $(common_objects) $(platform_objects)
-	ar rcsT $@ $(common_objects) $(platform_objects)
+	ar rcs $@ $(common_objects) $(platform_objects)
 
 clean:
 	rm -f config.h
