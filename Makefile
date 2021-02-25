@@ -9,14 +9,11 @@ all: libradb.a
 
 CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
 	-I. -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
-LDFLAGS += -lm -L.
 
 ifdef DEBUG
 	CFLAGS += -g -DGC_DEBUG -DDEBUG
-	LDFLAGS += -g
 else
 	CFLAGS += -O3 -g
-	LDFLAGS += -g
 endif
 
 ifeq ($(RADB_MEM), MALLOC)
@@ -40,23 +37,19 @@ platform_objects =
 
 ifeq ($(MACHINE), i686)
 	CFLAGS += -fno-pic
-	LDFLAGS += -fno-pic
 endif
 
 ifeq ($(PLATFORM), Linux)
 	platform_objects += 
-	LDFLAGS += -lgc
 endif
 
 ifeq ($(PLATFORM), FreeBSD)
 	platform_objects += 
 	CFLAGS += -I/usr/local/include
-	LDFLAGS += -L/usr/local/lib -lgc-threaded
 endif
 
 ifeq ($(PLATFORM), Darwin)
 	platform_objects += 
-	LDFLAGS += -lgc
 endif
 
 $(common_objects): config.h
