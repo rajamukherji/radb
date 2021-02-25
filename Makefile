@@ -8,8 +8,8 @@ all: libradb.a
 *.o: *.h
 
 CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
-	-I. -I../minilang -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
-LDFLAGS += -lm -L. -L../minilang
+	-I. -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
+LDFLAGS += -lm -L.
 
 ifdef DEBUG
 	CFLAGS += -g -DGC_DEBUG -DDEBUG
