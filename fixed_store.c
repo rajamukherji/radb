@@ -63,11 +63,7 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	Store->free = free;
 #endif
 	uint32_t NodeSize;
-	if (RequestedSize == 1) {
-		NodeSize = 1;
-	} else if (RequestedSize == 2) {
-		NodeSize = 2;
-	} else if (RequestedSize <= 4) {
+	if (RequestedSize <= 4) {
 		NodeSize = 4;
 	} else {
 		NodeSize = ((RequestedSize + 7) / 8) * 8;
