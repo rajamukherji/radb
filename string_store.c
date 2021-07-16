@@ -390,12 +390,12 @@ size_t string_store_alloc(string_store_t *Store) {
 			NumEntries *= 512;
 			size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
 			ftruncate(Store->HeaderFd, HeaderSize);
-	#ifdef Linux
+#ifdef Linux
 			Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
-	#else
+#else
 			munmap(Store->Header, Store->HeaderSize);
 			Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	#endif
+#endif
 			entry_t *Entries = Store->Header->Entries;
 			for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
 				Entries[I].Link = INVALID_INDEX;
