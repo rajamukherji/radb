@@ -21,6 +21,8 @@ size_t string_store_size(string_store_t *Store, size_t Index);
 size_t string_store_get(string_store_t *Store, size_t Index, void *Buffer, size_t Space);
 void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, size_t Length);
 
+void string_store_shift(string_store_t *Store, size_t Source, size_t Count, size_t Destination);
+
 int string_store_compare(string_store_t *Store, const void *Other, size_t Length, size_t Index);
 int string_store_compare2(string_store_t *Store, size_t Index1, size_t Index2);
 

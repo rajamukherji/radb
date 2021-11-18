@@ -378,6 +378,81 @@ void string_store_set(string_store_t *Store, size_t Index, const void *Buffer, s
 	//msync(Store->Data, Store->Header->NumNodes * NodeSize, MS_ASYNC);
 }
 
+void string_store_shift(string_store_t *Store, size_t Source, size_t Count, size_t Destination) {
+	size_t Index = (Source > Destination ? Source : Destination) + Count;
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += 512 - 1;
+		NumEntries /= 512;
+		NumEntries *= 512;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = INVALID_INDEX;
+			Entries[I].Length = 0;
+		}
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	entry_t *Entries = Store->Header->Entries;
+	size_t LargeSource, LargeDest, LargeCount;
+	size_t SmallSource, SmallDest, SmallCount;
+	if (Source < Destination) {
+		if (Source + Count > Destination) {
+			LargeSource = Source;
+			LargeDest = Destination;
+			LargeCount = Count;
+			SmallSource = Source + Count;
+			SmallDest = Source;
+			SmallCount = Destination - Source;
+		} else {
+			LargeSource = Source + Count;
+			LargeDest = Source;
+			LargeCount = Destination - Source;
+			SmallSource = Source;
+			SmallDest = Destination;
+			SmallCount = Count;
+		}
+	} else if (Source > Destination) {
+		if (Destination + Count > Source) {
+			LargeSource = Source;
+			LargeDest = Destination;
+			LargeCount = Count;
+			SmallSource = Destination;
+			SmallDest = Destination + Count;
+			SmallCount = Source - Destination;
+		} else {
+			LargeSource = Destination;
+			LargeDest = Destination + Count;
+			LargeCount = Source - Destination;
+			SmallSource = Source;
+			SmallDest = Destination;
+			SmallCount = Count;
+		}
+	} else {
+		return;
+	}
+	if (SmallCount <= 64) {
+		entry_t *SmallSaved = alloca(SmallCount * sizeof(entry_t));
+		memcpy(SmallSaved, Entries + SmallSource, SmallCount * sizeof(entry_t));
+		memmove(Entries + LargeDest, Entries + LargeSource, LargeCount * sizeof(entry_t));
+		memcpy(Entries + SmallDest, SmallSaved, SmallCount * sizeof(entry_t));
+	} else {
+		entry_t *SmallSaved = malloc(SmallCount * sizeof(entry_t));
+		memcpy(SmallSaved, Entries + SmallSource, SmallCount * sizeof(entry_t));
+		memmove(Entries + LargeDest, Entries + LargeSource, LargeCount * sizeof(entry_t));
+		memcpy(Entries + SmallDest, SmallSaved, SmallCount * sizeof(entry_t));
+		free(SmallSaved);
+	}
+}
+
 size_t string_store_alloc(string_store_t *Store) {
 	size_t FreeEntry = Store->Header->FreeEntry;
 	size_t Index = Store->Header->Entries[FreeEntry].Link;
