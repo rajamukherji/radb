@@ -401,7 +401,6 @@ void string_store_shift(string_store_t *Store, size_t Source, size_t Count, size
 		Store->Header->NumEntries += NumEntries;
 		Store->HeaderSize = HeaderSize;
 	}
-	entry_t *Entries = Store->Header->Entries;
 	size_t LargeSource, LargeDest, LargeCount;
 	size_t SmallSource, SmallDest, SmallCount;
 	if (Source < Destination) {
@@ -439,6 +438,7 @@ void string_store_shift(string_store_t *Store, size_t Source, size_t Count, size
 	} else {
 		return;
 	}
+	entry_t *Entries = Store->Header->Entries;
 	if (SmallCount <= 64) {
 		entry_t *SmallSaved = alloca(SmallCount * sizeof(entry_t));
 		memcpy(SmallSaved, Entries + SmallSource, SmallCount * sizeof(entry_t));

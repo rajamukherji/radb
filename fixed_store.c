@@ -156,6 +156,83 @@ void *fixed_store_get(fixed_store_t *Store, size_t Index) {
 	return Store->Header->Nodes + Index * Store->Header->NodeSize;
 }
 
+void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t Destination) {
+	size_t Index = (Source > Destination ? Source : Destination) + Count;
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += Store->Header->ChunkSize - 1;
+		NumEntries /= Store->Header->ChunkSize;
+		NumEntries *= Store->Header->ChunkSize;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * Store->Header->NodeSize;
+		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	size_t LargeSource, LargeDest, LargeCount;
+	size_t SmallSource, SmallDest, SmallCount;
+	if (Source < Destination) {
+		if (Source + Count > Destination) {
+			LargeSource = Source;
+			LargeDest = Destination;
+			LargeCount = Count;
+			SmallSource = Source + Count;
+			SmallDest = Source;
+			SmallCount = Destination - Source;
+		} else {
+			LargeSource = Source + Count;
+			LargeDest = Source;
+			LargeCount = Destination - Source;
+			SmallSource = Source;
+			SmallDest = Destination;
+			SmallCount = Count;
+		}
+	} else if (Source > Destination) {
+		if (Destination + Count > Source) {
+			LargeSource = Source;
+			LargeDest = Destination;
+			LargeCount = Count;
+			SmallSource = Destination;
+			SmallDest = Destination + Count;
+			SmallCount = Source - Destination;
+		} else {
+			LargeSource = Destination;
+			LargeDest = Destination + Count;
+			LargeCount = Source - Destination;
+			SmallSource = Source;
+			SmallDest = Destination;
+			SmallCount = Count;
+		}
+	} else {
+		return;
+	}
+	size_t NodeSize = Store->Header->NodeSize;
+	LargeSource *= NodeSize;
+	LargeDest *= NodeSize;
+	LargeCount *= NodeSize;
+	SmallSource *= NodeSize;
+	SmallDest *= NodeSize;
+	SmallCount *= NodeSize;
+	char *Nodes = Store->Header->Nodes;
+	if (SmallCount <= 256) {
+		char *SmallSaved = alloca(SmallCount);
+		memcpy(SmallSaved, Nodes + SmallSource, SmallCount);
+		memmove(Nodes + LargeDest, Nodes + LargeSource, LargeCount);
+		memcpy(Nodes + SmallDest, SmallSaved, SmallCount);
+	} else {
+		char *SmallSaved = malloc(SmallCount);
+		memcpy(SmallSaved, Nodes + SmallSource, SmallCount);
+		memmove(Nodes + LargeDest, Nodes + LargeSource, LargeCount);
+		memcpy(Nodes + SmallDest, SmallSaved, SmallCount);
+		free(SmallSaved);
+	}
+}
+
 size_t fixed_store_alloc(fixed_store_t *Store) {
 	size_t FreeEntry = Store->Header->FreeEntry;
 	size_t Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);

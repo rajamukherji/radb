@@ -17,6 +17,8 @@ size_t fixed_store_num_entries(fixed_store_t *Store);
 
 void *fixed_store_get(fixed_store_t *Store, size_t Index);
 
+void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t Destination);
+
 size_t fixed_store_alloc(fixed_store_t *Store);
 void fixed_store_free(fixed_store_t *Store, size_t Index);
 
