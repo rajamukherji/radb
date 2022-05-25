@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #define INVALID_INDEX 0xFFFFFFFF
+#define DELETED_INDEX 0xFFFFFFFE
 
 typedef struct string_index_t string_index_t;
 

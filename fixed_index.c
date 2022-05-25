@@ -26,7 +26,7 @@ typedef struct hash_t {
 typedef struct header_t {
 	uint32_t Signature, Version;
 	uint32_t Size, Space;
-	uint32_t KeySize, Reserved1;
+	uint32_t KeySize, Deleted;
 	hash_t Hashes[];
 } header_t;
 
@@ -80,6 +80,7 @@ fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t Chu
 	Store->Header->Signature = SIGNATURE;
 	Store->Header->Version = VERSION;
 	Store->Header->Size = Store->Header->Space = 64;
+	Store->Header->Deleted = 0;
 	Store->Header->KeySize = KeySize;
 	for (int I = 0; I < Store->Header->Size; ++I) Store->Header->Hashes[I].Link = INVALID_INDEX;
 	Store->Keys = fixed_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
@@ -157,7 +158,7 @@ static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	hash_t *B = Last;
 	hash_t T = *A;
 	hash_t P = *B;
-	while (P.Link == INVALID_INDEX) {
+	while (P.Link >= DELETED_INDEX) {
 		--B;
 		--Last;
 		if (A == B) return;
@@ -165,7 +166,7 @@ static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	}
 	while (A != B) {
 		int Cmp;
-		if (T.Link != INVALID_INDEX) {
+		if (T.Link < DELETED_INDEX) {
 			if (T.Hash < P.Hash) {
 				Cmp = -1;
 			} else if (T.Hash > P.Hash) {
@@ -249,6 +250,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 			return (fixed_index_result_t){Result, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
+		if (Space + Store->Header->Deleted > Store->Header->Size >> 3) HashSize = Store->Header->Size;
 		Mask = HashSize - 1;
 
 		char FileName2[strlen(Store->Prefix) + 10];
@@ -261,12 +263,13 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 		Header->Signature = SIGNATURE;
 		Header->Version = VERSION;
 		Header->Size = HashSize;
-		Header->Space = Store->Header->Space + Store->Header->Size;
+		Header->Space = Store->Header->Space + Store->Header->Deleted + (HashSize - Store->Header->Size);
+		Header->Deleted = 0;
 		Header->KeySize = Store->Header->KeySize;
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
 		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
-		for (hash_t *Old = Hashes; Old->Link != INVALID_INDEX; ++Old) {
+		for (hash_t *Old = Hashes; Old->Link < DELETED_INDEX; ++Old) {
 			unsigned long NewHash = Old->Hash;
 			unsigned int NewIncr = ((NewHash >> 8) | 1) & Mask;
 			unsigned int NewIndex = NewHash & Mask;
@@ -307,7 +310,7 @@ size_t fixed_index_search(fixed_index_t *Store, const char *Key) {
 	for (;;) {
 		if (Hashes[Index].Link == INVALID_INDEX) break;
 		if (Hashes[Index].Hash < Hash) break;
-		if (Hashes[Index].Hash == Hash) {
+		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
 			const void *HKey = fixed_store_get(Store->Keys, Hashes[Index].Link);
 			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
 			if (Cmp < 0) break;
@@ -320,5 +323,27 @@ size_t fixed_index_search(fixed_index_t *Store, const char *Key) {
 }
 
 size_t fixed_index_delete(fixed_index_t *Store, const char *Key) {
-	return 0;
+	uint32_t Hash = hash(Key, Store->Header->KeySize);
+	unsigned int Mask = Store->Header->Size - 1;
+	unsigned int Incr = ((Hash >> 8) | 1) & Mask;
+	unsigned int Index = Hash & Mask;
+	hash_t *Hashes = Store->Header->Hashes;
+	for (;;) {
+		if (Hashes[Index].Link == INVALID_INDEX) break;
+		if (Hashes[Index].Hash < Hash) break;
+		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
+			const void *HKey = fixed_store_get(Store->Keys, Hashes[Index].Link);
+			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
+			if (Cmp < 0) break;
+			if (Cmp == 0) {
+				fixed_store_free(Store->Keys, Hashes[Index].Link);
+				Hashes[Index].Link = DELETED_INDEX;
+				++Store->Header->Deleted;
+				return 0;
+			}
+		}
+		Index += Incr;
+		Index &= Mask;
+	}
+	return INVALID_INDEX;
 }
