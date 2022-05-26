@@ -214,10 +214,10 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 		size_t Space = Store->Header->Space;
 		if (--Space > Store->Header->Size >> 3) {
 			Store->Header->Space = Space;
-			uint32_t Result = fixed_store_alloc(Store->Keys);
-			memcpy(fixed_store_get(Store->Keys, Result), Key, Store->Header->KeySize);
+			uint32_t Link = fixed_store_alloc(Store->Keys);
+			memcpy(fixed_store_get(Store->Keys, Link), Key, Store->Header->KeySize);
 			hash_t Old = Hashes[Index];
-			Hashes[Index].Link = Result;
+			Hashes[Index].Link = Link;
 			Hashes[Index].Hash = Hash;
 			while (Old.Link != INVALID_INDEX) {
 				Incr = ((Old.Hash >> 8) | 1) & Mask;
@@ -227,7 +227,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return (fixed_index_result_t){Result, 1};
+						return (fixed_index_result_t){Link, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
@@ -247,7 +247,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return (fixed_index_result_t){Result, 1};
+			return (fixed_index_result_t){Link, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
 		if (Space + Store->Header->Deleted > Store->Header->Size >> 3) HashSize = Store->Header->Size;

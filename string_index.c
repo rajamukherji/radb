@@ -241,10 +241,10 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		size_t Space = Store->Header->Space;
 		if (--Space > Store->Header->Size >> 3) {
 			Store->Header->Space = Space;
-			uint32_t Result = string_store_alloc(Store->Keys);
-			string_store_set(Store->Keys, Result, Key, Length);
+			uint32_t Link = string_store_alloc(Store->Keys);
+			string_store_set(Store->Keys, Link, Key, Length);
 			hash_t Old = Hashes[Index];
-			Hashes[Index].Link = Result;
+			Hashes[Index].Link = Link;
 			Hashes[Index].Hash = Hash;
 			while (Old.Link != INVALID_INDEX) {
 				Incr = ((Old.Hash >> 8) | 1) & Mask;
@@ -254,7 +254,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return (string_index_result_t){Result, 1};
+						return (string_index_result_t){Link, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
@@ -272,7 +272,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return (string_index_result_t){Result, 1};
+			return (string_index_result_t){Link, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
 		if (Space + Store->Header->Deleted > Store->Header->Size >> 3) HashSize = Store->Header->Size;
