@@ -13,7 +13,7 @@
 #include <gc/gc.h>
 #endif
 
-typedef struct hash_t {
+typedef struct {
 	uint32_t Hash;
 	uint32_t Link;
 } hash_t;
@@ -23,7 +23,7 @@ typedef struct hash_t {
 #define SIGNATURE 0x49464152
 #define VERSION MAKE_VERSION(1, 0)
 
-typedef struct header_t {
+typedef struct {
 	uint32_t Signature, Version;
 	uint32_t Size, Space;
 	uint32_t KeySize, Deleted;

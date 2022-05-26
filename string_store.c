@@ -13,7 +13,7 @@
 #include <gc/gc.h>
 #endif
 
-typedef struct entry_t {
+typedef struct {
 	uint32_t Link, Length;
 } entry_t;
 
@@ -22,7 +22,7 @@ typedef struct entry_t {
 #define SIGNATURE 0x53534152
 #define VERSION MAKE_VERSION(1, 0)
 
-typedef struct header_t {
+typedef struct {
 	uint32_t Signature, Version;
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, NumNodes, NumFreeNodes, FreeNode;

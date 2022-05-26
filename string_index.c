@@ -13,7 +13,7 @@
 #include <gc/gc.h>
 #endif
 
-typedef struct hash_t {
+typedef struct {
 	uint32_t Hash;
 	uint32_t Link;
 } hash_t;
@@ -23,7 +23,7 @@ typedef struct hash_t {
 #define SIGNATURE 0x49534152
 #define VERSION MAKE_VERSION(1, 1)
 
-typedef struct header_t {
+typedef struct {
 	uint32_t Signature, Version;
 	uint32_t Size, Space;
 	uint32_t Deleted, Reserved;
@@ -87,6 +87,13 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	return Store;
 }
 
+typedef struct {
+	uint32_t Signature, Version;
+	uint32_t Size, Space;
+	uint32_t Deleted, Reserved;
+	hash_t Hashes[];
+} header_v0_t;
+
 string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
@@ -110,9 +117,10 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature == MAKE_VERSION(1, 0)) {
+		header_v0_t *HeaderV0 = (header_v0_t *)Store->Header;
 		char FileName2[strlen(Prefix) + 10];
 		sprintf(FileName2, "%s.temp", Store->Prefix);
-		uint32_t HashSize = Store->Header->Size;
+		uint32_t HashSize = HeaderV0->Size;
 		size_t HeaderSize = sizeof(header_t) + HashSize * sizeof(hash_t);
 		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
 		ftruncate(HeaderFd, HeaderSize);
@@ -120,9 +128,9 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 		Header->Signature = SIGNATURE;
 		Header->Version = VERSION;
 		Header->Size = HashSize;
-		Header->Space = Store->Header->Size;
+		Header->Space = HeaderV0->Space;
 		Header->Deleted = 0;
-		memcpy(Header->Hashes, Store->Header->Hashes, HashSize * sizeof(hash_t));
+		memcpy(Header->Hashes, HeaderV0->Hashes, HashSize * sizeof(hash_t));
 		munmap(Store->Header, Store->HeaderSize);
 		close(Store->HeaderFd);
 		rename(FileName2, FileName);

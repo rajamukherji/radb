@@ -18,7 +18,7 @@
 #define SIGNATURE 0x53464152
 #define VERSION MAKE_VERSION(1, 0)
 
-typedef struct header_t {
+typedef struct {
 	uint32_t Signature, Version;
 	uint32_t NodeSize, ChunkSize;
 	uint32_t NumEntries, FreeEntry;
