@@ -90,7 +90,6 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 typedef struct {
 	uint32_t Signature, Version;
 	uint32_t Size, Space;
-	uint32_t Deleted, Reserved;
 	hash_t Hashes[];
 } header_v0_t;
 
