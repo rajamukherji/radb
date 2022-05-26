@@ -116,7 +116,7 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
-	if (Store->Header->Signature == MAKE_VERSION(1, 0)) {
+	if (Store->Header->Version == MAKE_VERSION(1, 0)) {
 		header_v0_t *HeaderV0 = (header_v0_t *)Store->Header;
 		char FileName2[strlen(Prefix) + 10];
 		sprintf(FileName2, "%s.temp", Store->Prefix);
