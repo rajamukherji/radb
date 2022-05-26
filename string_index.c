@@ -360,10 +360,11 @@ size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length
 			int Cmp = string_store_compare(Store->Keys, Key, Length, Hashes[Index].Link);
 			if (Cmp < 0) break;
 			if (Cmp == 0) {
-				string_store_free(Store->Keys, Hashes[Index].Link);
+				uint32_t Link = Hashes[Index].Link;
+				string_store_free(Store->Keys, Link);
 				Hashes[Index].Link = DELETED_INDEX;
 				++Store->Header->Deleted;
-				return 0;
+				return Link;
 			}
 		}
 		Index += Incr;

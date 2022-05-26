@@ -336,10 +336,11 @@ size_t fixed_index_delete(fixed_index_t *Store, const char *Key) {
 			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
 			if (Cmp < 0) break;
 			if (Cmp == 0) {
-				fixed_store_free(Store->Keys, Hashes[Index].Link);
+				uint32_t Link = Hashes[Index].Link;
+				fixed_store_free(Store->Keys, Link);
 				Hashes[Index].Link = DELETED_INDEX;
 				++Store->Header->Deleted;
-				return 0;
+				return Link;
 			}
 		}
 		Index += Incr;
