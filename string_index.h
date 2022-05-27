@@ -12,7 +12,9 @@ typedef struct string_index_t string_index_t;
 
 string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS);
 string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS);
-size_t string_index_count(string_index_t *Store);
+size_t string_index_num_entries(string_index_t *Store);
+#define string_index_count string_index_num_entries
+size_t string_index_num_deleted(string_index_t *Store);
 void string_index_close(string_index_t *Store);
 
 size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length);

@@ -828,8 +828,12 @@ static uint32_t hash(const char *Key, int Length) {
 	return Hash;
 }
 
-size_t string_index_count(string_index_t *Store) {
-	return Store->Header->Size - Store->Header->Space;
+size_t string_index_num_entries(string_index_t *Store) {
+	return Store->Header->Size - (Store->Header->Space + Store->Header->Deleted);
+}
+
+size_t string_index_num_deleted(string_index_t *Store) {
+	return Store->Header->Deleted;
 }
 
 size_t string_index_size(string_index_t *Store, size_t Index) {

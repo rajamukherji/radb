@@ -391,8 +391,12 @@ static uint32_t hash(const char *Key, int Length) {
 	return Hash;
 }
 
-size_t fixed_index_count(fixed_index_t *Store) {
-	return Store->Header->Size - Store->Header->Space;
+size_t fixed_index_num_entries(fixed_index_t *Store) {
+	return Store->Header->Size - (Store->Header->Space + Store->Header->Deleted);
+}
+
+size_t fixed_index_num_deleted(fixed_index_t *Store) {
+	return Store->Header->Deleted;
 }
 
 const void *fixed_index_get(fixed_index_t *Store, size_t Index) {
