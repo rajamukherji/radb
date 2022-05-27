@@ -27,11 +27,7 @@ config.h: config.h.in
 	sed 's/RADB_MEM_MODE/RADB_MEM_PER_STORE/g' config.h.in > config.h
 endif
 
-common_objects = \
-	string_store.o \
-	string_index.o \
-	fixed_store.o \
-	fixed_index.o
+common_objects = string.o fixed.o
 
 platform_objects =
 
