@@ -240,7 +240,13 @@ void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t
 
 size_t fixed_store_alloc(fixed_store_t *Store) {
 	size_t FreeEntry = Store->Header->FreeEntry;
-	size_t Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
+	size_t Index;
+	if (FreeEntry > Store->Header->NumEntries) {
+		FreeEntry = Store->Header->NumEntries;
+		Index = INVALID_INDEX;
+	} else {
+		Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
+	}
 	if (Index == INVALID_INDEX) {
 		Index = FreeEntry + 1;
 		if (Index >= Store->Header->NumEntries) {
