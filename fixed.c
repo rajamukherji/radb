@@ -116,6 +116,23 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 		close(Store->HeaderFd);
 		return NULL;
 	}
+	uint32_t NodeSize = Store->Header->NodeSize;
+	size_t ExpectedSize = sizeof(fixed_store_header_t) + Store->Header->NumEntries * NodeSize;
+	if (ExpectedSize != Store->HeaderSize) {
+		// The header was not written after the store size was increased, adjust accordingly.
+		uint32_t NumEntries = (Store->HeaderSize - sizeof(fixed_store_header_t)) / NodeSize;
+		void *End = Store->Header->Nodes + sizeof(fixed_store_header_t) + NumEntries * NodeSize;
+		uint32_t FreeEntry = NumEntries;
+		while (End > (void *)Store->Header->Nodes) {
+			--FreeEntry;
+			End -= NodeSize;
+			if (*(uint32_t *)End) {
+				Store->Header->FreeEntry = FreeEntry;
+				Store->Header->NumEntries = NumEntries;
+				break;
+			}
+		}
+	}
 	return Store;
 }
 
