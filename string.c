@@ -142,8 +142,8 @@ string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 void string_store_close(string_store_t *Store) {
-	//msync(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize, MS_SYNC);
-	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	msync(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize, MS_SYNC);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->DataFd);
@@ -805,10 +805,8 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 void string_index_close(string_index_t *Store) {
-	//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
-	//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
-	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	string_store_close(Store->Keys);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)

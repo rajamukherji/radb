@@ -112,8 +112,7 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != FIXED_STORE_SIGNATURE) {
 		puts("Header mismatch - aborting");
-		munmap(Store->Header, Store->HeaderSize);
-		close(Store->HeaderFd);
+		fixed_store_close(Store);
 		return NULL;
 	}
 	uint32_t NodeSize = Store->Header->NodeSize;
@@ -126,10 +125,14 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 		while (End > (void *)Store->Header->Nodes) {
 			--FreeEntry;
 			End -= NodeSize;
-			if (*(uint32_t *)End) {
+			if (*(uint32_t *)End == INVALID_INDEX) {
 				Store->Header->FreeEntry = FreeEntry;
 				Store->Header->NumEntries = NumEntries;
 				break;
+			} else if (*(uint32_t *)End) {
+				puts("Header corrupted");
+				fixed_store_close(Store);
+				return NULL;
 			}
 		}
 	}
@@ -137,7 +140,7 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 void fixed_store_close(fixed_store_t *Store) {
-	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
@@ -257,13 +260,7 @@ void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t
 
 size_t fixed_store_alloc(fixed_store_t *Store) {
 	size_t FreeEntry = Store->Header->FreeEntry;
-	size_t Index;
-	if (FreeEntry > Store->Header->NumEntries) {
-		FreeEntry = Store->Header->NumEntries;
-		Index = INVALID_INDEX;
-	} else {
-		Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
-	}
+	size_t Index = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
 	if (Index == INVALID_INDEX) {
 		Index = FreeEntry + 1;
 		if (Index >= Store->Header->NumEntries) {
@@ -391,10 +388,8 @@ fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 void fixed_index_close(fixed_index_t *Store) {
-	//msync(Store->Strings, Store->Header->StringsSize, MS_SYNC);
-	//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_SYNC);
-	//msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	fixed_store_close(Store->Keys);
+	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
