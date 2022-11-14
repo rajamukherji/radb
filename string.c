@@ -756,6 +756,8 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return NULL;
+	string_store_t *Keys = string_store_open(Prefix RADB_MEM_ARGS);
+	if (!Keys) return NULL;
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -800,7 +802,7 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 		close(Store->HeaderFd);
 		return NULL;
 	}
-	Store->Keys = string_store_open(Prefix RADB_MEM_ARGS);
+	Store->Keys = Keys;
 	return Store;
 }
 

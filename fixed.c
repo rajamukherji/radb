@@ -360,6 +360,8 @@ fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return NULL;
+	fixed_store_t *Keys = fixed_store_open(Prefix RADB_MEM_ARGS);
+	if (!Keys) return NULL;
 #if defined(RADB_MEM_MALLOC)
 	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -383,7 +385,7 @@ fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
 		close(Store->HeaderFd);
 		return NULL;
 	}
-	Store->Keys = fixed_store_open(Prefix RADB_MEM_ARGS);
+	Store->Keys = Keys;
 	return Store;
 }
 
