@@ -2,6 +2,7 @@
 #define FIXED_STORE_H
 
 #include "config.h"
+#include "common.h"
 
 #include <stddef.h>
 
@@ -12,6 +13,13 @@ typedef struct fixed_store_t fixed_store_t;
 fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS);
 fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS);
 void fixed_store_close(fixed_store_t *Store);
+
+typedef struct {
+	fixed_store_t *Store;
+	radb_error_t Error;
+} fixed_store_open_t;
+
+fixed_store_open_t fixed_store_open_v2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t fixed_store_num_entries(fixed_store_t *Store);
 

@@ -2,6 +2,7 @@
 #define FIXED_INDEX_H
 
 #include "config.h"
+#include "common.h"
 
 #include <stddef.h>
 
@@ -16,6 +17,13 @@ size_t fixed_index_num_entries(fixed_index_t *Store);
 #define fixed_index_count fixed_index_num_entries
 size_t fixed_index_num_deleted(fixed_index_t *Store);
 void fixed_index_close(fixed_index_t *Store);
+
+typedef struct {
+	fixed_index_t *Index;
+	radb_error_t Error;
+} fixed_index_open_t;
+
+fixed_index_open_t fixed_index_open_v2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t fixed_index_insert(fixed_index_t *Store, const char *Key);
 size_t fixed_index_search(fixed_index_t *Store, const char *Key);

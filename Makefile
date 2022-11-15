@@ -27,7 +27,7 @@ config.h: config.h.in
 	sed 's/RADB_MEM_MODE/RADB_MEM_PER_STORE/g' config.h.in > config.h
 endif
 
-common_objects = string.o fixed.o
+common_objects = string.o fixed.o common.o
 
 platform_objects =
 
@@ -65,6 +65,7 @@ install_lib = $(DESTDIR)$(PREFIX)/lib
 install_h = \
 	$(install_include)/radb.h \
 	$(install_include)/config.h \
+	$(install_include)/common.h \
 	$(install_include)/string_store.h \
 	$(install_include)/string_index.h \
 	$(install_include)/fixed_store.h \

@@ -107,11 +107,11 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	return Store;
 }
 
-string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
+string_store_open_t string_store_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
-	if (stat(FileName, Stat)) return NULL;
+	if (stat(FileName, Stat)) return (string_store_open_t){NULL, RADB_FILE_NOT_FOUND};
 #if defined(RADB_MEM_MALLOC)
 	string_store_t *Store = malloc(sizeof(string_store_t));
 	Store->Prefix = strdup(Prefix);
@@ -130,15 +130,18 @@ string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != STRING_STORE_SIGNATURE) {
-		puts("Header mismatch - aborting");
 		munmap(Store->Header, Store->HeaderSize);
 		close(Store->HeaderFd);
-		return NULL;
+		return (string_store_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
 	sprintf(FileName, "%s.data", Prefix);
 	Store->DataFd = open(FileName, O_RDWR, 0777);
 	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
-	return Store;
+	return (string_store_open_t){Store, RADB_SUCCESS};
+}
+
+string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
+	return string_store_open_v2(Prefix RADB_MEM_ARGS).Store;
 }
 
 void string_store_close(string_store_t *Store) {
@@ -751,13 +754,13 @@ typedef struct {
 	hash_t Hashes[];
 } string_index_header_v0_t;
 
-string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
+string_index_open_t string_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
-	if (stat(FileName, Stat)) return NULL;
-	string_store_t *Keys = string_store_open(Prefix RADB_MEM_ARGS);
-	if (!Keys) return NULL;
+	if (stat(FileName, Stat)) return (string_index_open_t){NULL, RADB_FILE_NOT_FOUND};
+	string_store_open_t KeysOpen = string_store_open_v2(Prefix RADB_MEM_ARGS);
+	if (!KeysOpen.Store) return (string_index_open_t){NULL, KeysOpen.Error + 3};
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -797,13 +800,16 @@ string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
 		Store->Header = Header;
 		Store->HeaderFd = HeaderFd;
 	} else if (Store->Header->Signature != STRING_INDEX_SIGNATURE) {
-		puts("Header mismatch - aborting");
 		munmap(Store->Header, Store->HeaderSize);
 		close(Store->HeaderFd);
-		return NULL;
+		return (string_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
-	Store->Keys = Keys;
-	return Store;
+	Store->Keys = KeysOpen.Store;
+	return (string_index_open_t){Store, RADB_SUCCESS};
+}
+
+string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
+	return string_index_open_v2(Prefix RADB_MEM_ARGS).Index;
 }
 
 void string_index_close(string_index_t *Store) {

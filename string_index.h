@@ -2,6 +2,7 @@
 #define STRING_INDEX_H
 
 #include "config.h"
+#include "common.h"
 
 #include <stddef.h>
 
@@ -16,6 +17,13 @@ size_t string_index_num_entries(string_index_t *Store);
 #define string_index_count string_index_num_entries
 size_t string_index_num_deleted(string_index_t *Store);
 void string_index_close(string_index_t *Store);
+
+typedef struct {
+	string_index_t *Index;
+	radb_error_t Error;
+} string_index_open_t;
+
+string_index_open_t string_index_open_v2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length);
 size_t string_index_search(string_index_t *Store, const char *Key, size_t Length);

@@ -2,6 +2,7 @@
 #define STRING_STORE_H
 
 #include "config.h"
+#include "common.h"
 
 #include <stddef.h>
 
@@ -14,6 +15,13 @@ typedef struct string_store_reader_t string_store_reader_t;
 string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS);
 string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS);
 void string_store_close(string_store_t *Store);
+
+typedef struct {
+	string_store_t *Store;
+	radb_error_t Error;
+} string_store_open_t;
+
+string_store_open_t string_store_open_v2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t string_store_num_entries(string_store_t *Store);
 
