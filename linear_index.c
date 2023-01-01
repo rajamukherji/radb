@@ -33,8 +33,8 @@ struct linear_index_t {
 	linear_header_t *Header;
 	linear_entry_t *Table;
 	void *Keys;
-	int (*Compare)(void *Keys, void *Full, uint32_t Index);
-	uint32_t (*Insert)(void *Keys, void *Full);
+	linear_compare_t Compare;
+	linear_insert_t Insert;
 	size_t HeaderSize, TableSize;
 	int HeaderFd, TableFd;
 };

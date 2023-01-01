@@ -11,7 +11,7 @@
 
 typedef struct linear_index_t linear_index_t;
 typedef int (*linear_compare_t)(void *Keys, void *Full, uint32_t Index);
-typedef uint32_t (*linear_insert_t)(void *Keys, void *Full);
+typedef size_t (*linear_insert_t)(void *Keys, void *Full);
 
 linear_index_t *linear_index_open(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);
 void linear_index_close(linear_index_t *Store);
