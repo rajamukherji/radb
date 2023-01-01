@@ -5,5 +5,6 @@
 #include "string_index.h"
 #include "fixed_store.h"
 #include "fixed_index.h"
+#include "linear_index.h"
 
 #endif
