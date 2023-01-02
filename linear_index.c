@@ -209,7 +209,6 @@ static void linear_index_add_offset(linear_index_t *Store) {
 			++A;
 		} else {
 			--B;
-			B->Index = NewIndex;
 			uint32_t TempValue = A->Value;
 			A->Value = B->Value;
 			B->Value = TempValue;
@@ -217,6 +216,7 @@ static void linear_index_add_offset(linear_index_t *Store) {
 			memcpy(TempKey, A->Key, sizeof(linear_key_t));
 			memcpy(A->Key, B->Key, sizeof(linear_key_t));
 			memcpy(B->Key, TempKey, sizeof(linear_key_t));
+			B->Index = NewIndex;
 		}
 	}
 	if (B == Last) {
@@ -249,7 +249,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 	size_t Offset = Nodes[Index].Offset;
 	if (Offset == INVALID_INDEX) {
 		size_t Free = Store->Header->NextFree;
-		if (Free != INVALID_INDEX) {
+		if (Free != INVALID_INDEX && Nodes[Free].Index == INVALID_INDEX) {
 			printf("%s:%d\n", __FUNCTION__, __LINE__);
 			Store->Header->NextFree = Nodes[Free].Next;
 			Nodes[Index].Offset = Free;
