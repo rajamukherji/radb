@@ -13,7 +13,8 @@ typedef struct linear_index_t linear_index_t;
 typedef int (*linear_compare_t)(void *Keys, void *Full, uint32_t Index);
 typedef size_t (*linear_insert_t)(void *Keys, void *Full);
 
-linear_index_t *linear_index_open(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);
+linear_index_t *linear_index_open(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);linear_index_t *linear_index_create(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);
+size_t linear_index_count(linear_index_t *Store);
 void linear_index_close(linear_index_t *Store);
 
 typedef struct {
@@ -23,7 +24,6 @@ typedef struct {
 
 typedef uint8_t linear_key_t[16];
 
-linear_index_t *linear_index_create(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);
 linear_index_open_t linear_index_open_v2(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS);
 
 size_t linear_index_insert(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full);

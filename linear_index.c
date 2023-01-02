@@ -20,7 +20,7 @@ typedef struct {
 	uint32_t Signature, Version;
 	uint32_t NumOffsets, NumEntries;
 	uint32_t NumNodes, NextFree;
-	uint32_t Reserved1, Reserved2;
+	uint32_t Count, Reserved1;
 	linear_node_t Nodes[];
 } linear_header_t;
 
@@ -85,6 +85,7 @@ linear_index_t *linear_index_create(const char *Prefix, void *Keys, linear_compa
 	Store->Header->NumOffsets = 1;
 	Store->Header->NumEntries = 0;
 	Store->Header->NextFree = INVALID_INDEX;
+	Store->Header->Count = 0;
 	Store->Header->Nodes[0].Index = INVALID_INDEX;
 	Store->Keys = Keys;
 	Store->Compare = Compare;
@@ -141,6 +142,10 @@ void linear_index_close(linear_index_t *Store) {
 	Store->free(Store->Allocator, (void *)Store->Prefix);
 	Store->free(Store->Allocator, Store);
 #endif
+}
+
+size_t linear_index_count(linear_index_t *Store) {
+	return Store->Header->Count;
 }
 
 static uint32_t linear_index_hash(linear_key_t Key) {
@@ -257,6 +262,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash,
 	linear_node_t *Nodes = Store->Header->Nodes;
 	size_t Offset = Nodes[Index].Offset;
 	if (Offset == INVALID_INDEX) {
+		++Store->Header->Count;
 		size_t Free = Store->Header->NextFree;
 		if (Free != INVALID_INDEX && Nodes[Free].Index == INVALID_INDEX) {
 			Store->Header->NextFree = Nodes[Free].Value;
@@ -275,6 +281,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash,
 	linear_node_t *Last = Nodes + Store->Header->NumEntries;
 	for (linear_node_t *Entry = Nodes + Offset; Entry < Last; ++Entry) {
 		if (Entry->Index == INVALID_INDEX) {
+			++Store->Header->Count;
 			Entry->Index = Index;
 			Entry->Hash = Hash;
 			memcpy(Entry->Key, Key, sizeof(linear_key_t));
@@ -282,6 +289,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash,
 			linear_index_add_offset(Store);
 			return (linear_index_result_t){Insert, 1};
 		} else if (Entry->Index != Index) {
+			++Store->Header->Count;
 			if (Offset > 0 && Nodes[Offset - 1].Index == INVALID_INDEX) {
 				Nodes[Index].Offset = Offset - 1;
 				linear_node_t *Entry2 = Nodes + (Offset - 1);
@@ -318,6 +326,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash,
 			return (linear_index_result_t){Entry->Value, 0};
 		}
 	}
+	++Store->Header->Count;
 	return linear_index_add_entry(Store, Index, Hash, Key, Full);
 }
 
