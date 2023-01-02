@@ -119,6 +119,9 @@ linear_index_open_t linear_index_open_v2(const char *Prefix, void *Keys, linear_
 		close(Store->HeaderFd);
 		return (linear_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
+	Store->Keys = Keys;
+	Store->Compare = Compare;
+	Store->Insert = Insert;
 	return (linear_index_open_t){Store, RADB_SUCCESS};
 }
 
