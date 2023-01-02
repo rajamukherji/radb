@@ -247,7 +247,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 			Store->Header->NextFree = Nodes[Free].Next;
 			Nodes[Index].Offset = Free;
 			Nodes[Free].Index = Index;
-			memcpy(Nodes[Free].Key, Key, sizeof(key_t));
+			memcpy(Nodes[Free].Key, Key, sizeof(linear_key_t));
 			uint32_t Insert = Nodes[Free].Value = Store->Insert(Store->Keys, Full);
 			linear_index_add_offset(Store);
 			return (linear_index_result_t){Insert, 1};
@@ -283,7 +283,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				linear_node_t *Target = Nodes + Store->Header->NumEntries;
 				for (int I = 0; I < Count; ++I, ++Source, ++Target) {
 					Target->Index = Index;
-					memcpy(Target->Key, Source->Key, sizeof(key_t));
+					memcpy(Target->Key, Source->Key, sizeof(linear_key_t));
 					Target->Value = Source->Value;
 					Source->Index = INVALID_INDEX;
 				}
