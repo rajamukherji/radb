@@ -295,8 +295,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + Count + 1);
 				Nodes[Index].Offset = Store->Header->NumEntries;
 				linear_node_t *Source = Nodes + Offset;
-				Source->Value = Store->Header->NextFree;
-				Store->Header->NextFree = Offset;
 				linear_node_t *Target = Nodes + Store->Header->NumEntries;
 				Store->Header->NumEntries += (Count + 1);
 				for (int I = 0; I < Count; ++I, ++Source, ++Target) {
@@ -306,6 +304,8 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 					Target->Value = Source->Value;
 					Source->Index = INVALID_INDEX;
 				}
+				Nodes[Offset].Value = Store->Header->NextFree;
+				Store->Header->NextFree = Offset;
 				Target->Index = Index;
 				Target->Hash = Hash;
 				memcpy(Target->Key, Key, sizeof(linear_key_t));
