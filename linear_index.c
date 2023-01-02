@@ -214,6 +214,9 @@ static void linear_index_add_offset(linear_index_t *Store) {
 			++A;
 		} else {
 			--B;
+			uint32_t TempHash = A->Hash;
+			A->Hash = B->Hash;
+			B->Hash = TempHash;
 			uint32_t TempValue = A->Value;
 			A->Value = B->Value;
 			B->Value = TempValue;
@@ -298,6 +301,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				Store->Header->NumEntries += (Count + 1);
 				for (int I = 0; I < Count; ++I, ++Source, ++Target) {
 					Target->Index = Index;
+					Target->Hash = Source->Hash;
 					memcpy(Target->Key, Source->Key, sizeof(linear_key_t));
 					Target->Value = Source->Value;
 					Source->Index = INVALID_INDEX;
