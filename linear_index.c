@@ -11,7 +11,7 @@
 typedef struct {
 	uint32_t Offset;
 	uint32_t Index;
-	uint32_t Next;
+	uint32_t Hash;
 	uint32_t Value;
 	linear_key_t Key;
 } linear_node_t;
@@ -143,10 +143,16 @@ void linear_index_close(linear_index_t *Store) {
 #endif
 }
 
+static uint32_t linear_index_hash(linear_key_t Key) {
+	uint32_t Hash = 5381;
+	for (int I = 0; I < 16; ++I) Hash = ((Hash << 5) + Hash) + Key[I];
+	return Hash;
+}
+
 size_t linear_index_search(linear_index_t *Store, linear_key_t Key, void *Full) {
 	size_t NumOffset = Store->Header->NumOffsets;
 	size_t Scale = NumOffset > 1 ? 1 << (64 - __builtin_clzl(NumOffset - 1)) : 1;
-	size_t Index = *(uint32_t *)Key & (Scale - 1);
+	size_t Index = linear_index_hash(Key) & (Scale - 1);
 	if (Index >= NumOffset) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
 	size_t Offset = Nodes[Index].Offset;
@@ -202,7 +208,7 @@ static void linear_index_add_offset(linear_index_t *Store) {
 	linear_node_t *B = Last;
 	Store->Header->NumOffsets = ++NumOffsets;
 	while (A < B) {
-		size_t NewIndex = *(uint32_t *)A->Key & (Scale - 1);
+		size_t NewIndex = A->Hash & (Scale - 1);
 		if (NewIndex >= NumOffsets) NewIndex -= Shift;
 		if (NewIndex == Index) {
 			++A;
@@ -226,11 +232,12 @@ static void linear_index_add_offset(linear_index_t *Store) {
 	}
 }
 
-static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Index, linear_key_t Key, void *Full) {
+static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Index, uint32_t Hash, linear_key_t Key, void *Full) {
 	linear_node_t *Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + 1);
 	size_t Offset = Store->Header->NumEntries++;
 	linear_node_t *Entry = Nodes + Offset;
 	Entry->Index = Index;
+	Entry->Hash = Hash;
 	memcpy(Entry->Key, Key, sizeof(linear_key_t));
 	uint32_t Insert = Entry->Value = Store->Insert(Store->Keys, Full);
 	linear_index_add_offset(Store);
@@ -240,29 +247,32 @@ static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint3
 linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t Key, void *Full) {
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
-	size_t Index = *(uint32_t *)Key & (Scale - 1);
+	uint32_t Hash = linear_index_hash(Key);
+	size_t Index = Hash & (Scale - 1);
 	if (Index >= NumOffsets) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
 	size_t Offset = Nodes[Index].Offset;
 	if (Offset == INVALID_INDEX) {
 		size_t Free = Store->Header->NextFree;
 		if (Free != INVALID_INDEX && Nodes[Free].Index == INVALID_INDEX) {
-			Store->Header->NextFree = Nodes[Free].Next;
+			Store->Header->NextFree = Nodes[Free].Value;
 			Nodes[Index].Offset = Free;
 			Nodes[Free].Index = Index;
+			Nodes[Free].Hash = Hash;
 			memcpy(Nodes[Free].Key, Key, sizeof(linear_key_t));
 			uint32_t Insert = Nodes[Free].Value = Store->Insert(Store->Keys, Full);
 			linear_index_add_offset(Store);
 			return (linear_index_result_t){Insert, 1};
 		} else {
 			Nodes[Index].Offset = Store->Header->NumEntries;
-			return linear_index_add_entry(Store, Index, Key, Full);
+			return linear_index_add_entry(Store, Index, Hash, Key, Full);
 		}
 	}
 	linear_node_t *Last = Nodes + Store->Header->NumEntries;
 	for (linear_node_t *Entry = Nodes + Offset; Entry < Last; ++Entry) {
 		if (Entry->Index == INVALID_INDEX) {
 			Entry->Index = Index;
+			Entry->Hash = Hash;
 			memcpy(Entry->Key, Key, sizeof(linear_key_t));
 			uint32_t Insert = Entry->Value = Store->Insert(Store->Keys, Full);
 			linear_index_add_offset(Store);
@@ -272,6 +282,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				Nodes[Index].Offset = Offset - 1;
 				linear_node_t *Entry2 = Nodes + (Offset - 1);
 				Entry2->Index = Index;
+				Entry2->Hash = Hash;
 				memcpy(Entry2->Key, Key, sizeof(linear_key_t));
 				uint32_t Insert = Entry2->Value = Store->Insert(Store->Keys, Full);
 				linear_index_add_offset(Store);
@@ -281,7 +292,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + Count + 1);
 				Nodes[Index].Offset = Store->Header->NumEntries;
 				linear_node_t *Source = Nodes + Offset;
-				Source->Next = Store->Header->NextFree;
+				Source->Value = Store->Header->NextFree;
 				Store->Header->NextFree = Offset;
 				linear_node_t *Target = Nodes + Store->Header->NumEntries;
 				Store->Header->NumEntries += (Count + 1);
@@ -292,6 +303,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 					Source->Index = INVALID_INDEX;
 				}
 				Target->Index = Index;
+				Target->Hash = Hash;
 				memcpy(Target->Key, Key, sizeof(linear_key_t));
 				uint32_t Insert = Target->Value = Store->Insert(Store->Keys, Full);
 				linear_index_add_offset(Store);
@@ -301,7 +313,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 			return (linear_index_result_t){Entry->Value, 0};
 		}
 	}
-	return linear_index_add_entry(Store, Index, Key, Full);
+	return linear_index_add_entry(Store, Index, Hash, Key, Full);
 }
 
 size_t linear_index_insert(linear_index_t *Store, linear_key_t Key, void *Full) {
