@@ -183,7 +183,6 @@ static linear_node_t *linear_index_grow_nodes(linear_index_t *Store, size_t Targ
 }
 
 static void linear_index_add_offset(linear_index_t *Store) {
-	printf("%s:%d\n", __FUNCTION__, __LINE__);
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = 1 << (64 - __builtin_clzl(NumOffsets));
 	size_t Shift = Scale >> 1;
@@ -228,7 +227,6 @@ static void linear_index_add_offset(linear_index_t *Store) {
 }
 
 static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Index, linear_key_t Key, void *Full) {
-	printf("%s:%d\n", __FUNCTION__, __LINE__);
 	linear_node_t *Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + 1);
 	size_t Offset = Store->Header->NumEntries++;
 	linear_node_t *Entry = Nodes + Offset;
@@ -240,7 +238,6 @@ static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint3
 }
 
 linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t Key, void *Full) {
-	printf("%s:%d\n", __FUNCTION__, __LINE__);
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
 	size_t Index = *(uint32_t *)Key & (Scale - 1);
@@ -250,7 +247,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 	if (Offset == INVALID_INDEX) {
 		size_t Free = Store->Header->NextFree;
 		if (Free != INVALID_INDEX && Nodes[Free].Index == INVALID_INDEX) {
-			printf("%s:%d\n", __FUNCTION__, __LINE__);
 			Store->Header->NextFree = Nodes[Free].Next;
 			Nodes[Index].Offset = Free;
 			Nodes[Free].Index = Index;
@@ -266,7 +262,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 	linear_node_t *Last = Nodes + Store->Header->NumEntries;
 	for (linear_node_t *Entry = Nodes + Offset; Entry < Last; ++Entry) {
 		if (Entry->Index == INVALID_INDEX) {
-			printf("%s:%d\n", __FUNCTION__, __LINE__);
 			Entry->Index = Index;
 			memcpy(Entry->Key, Key, sizeof(linear_key_t));
 			uint32_t Insert = Entry->Value = Store->Insert(Store->Keys, Full);
@@ -274,7 +269,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 			return (linear_index_result_t){Insert, 1};
 		} else if (Entry->Index != Index) {
 			if (Offset > 0 && Nodes[Offset - 1].Index == INVALID_INDEX) {
-				printf("%s:%d\n", __FUNCTION__, __LINE__);
 				Nodes[Index].Offset = Offset - 1;
 				linear_node_t *Entry2 = Nodes + (Offset - 1);
 				Entry2->Index = Index;
@@ -283,7 +277,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				linear_index_add_offset(Store);
 				return (linear_index_result_t){Insert, 1};
 			} else {
-				printf("%s:%d\n", __FUNCTION__, __LINE__);
 				size_t Count = (Entry - Nodes) - Offset;
 				Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + Count + 1);
 				Nodes[Index].Offset = Store->Header->NumEntries;
@@ -308,7 +301,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 			return (linear_index_result_t){Entry->Value, 0};
 		}
 	}
-	printf("%s:%d\n", __FUNCTION__, __LINE__);
 	return linear_index_add_entry(Store, Index, Key, Full);
 }
 
