@@ -149,10 +149,11 @@ static uint32_t linear_index_hash(linear_key_t Key) {
 	return Hash;
 }
 
-size_t linear_index_search(linear_index_t *Store, linear_key_t Key, void *Full) {
+size_t linear_index_search(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
 	size_t NumOffset = Store->Header->NumOffsets;
 	size_t Scale = NumOffset > 1 ? 1 << (64 - __builtin_clzl(NumOffset - 1)) : 1;
-	size_t Index = linear_index_hash(Key) & (Scale - 1);
+	if (!Hash) Hash = linear_index_hash(Key);
+	size_t Index = Hash & (Scale - 1);
 	if (Index >= NumOffset) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
 	size_t Offset = Nodes[Index].Offset;
@@ -247,10 +248,10 @@ static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint3
 	return (linear_index_result_t){Insert, 1};
 }
 
-linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t Key, void *Full) {
+linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
-	uint32_t Hash = linear_index_hash(Key);
+	if (!Hash) Hash = linear_index_hash(Key);
 	size_t Index = Hash & (Scale - 1);
 	if (Index >= NumOffsets) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
@@ -320,6 +321,6 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 	return linear_index_add_entry(Store, Index, Hash, Key, Full);
 }
 
-size_t linear_index_insert(linear_index_t *Store, linear_key_t Key, void *Full) {
-	return linear_index_insert2(Store, Key, Full).Index;
+size_t linear_index_insert(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
+	return linear_index_insert2(Store, Hash, Key, Full).Index;
 }
