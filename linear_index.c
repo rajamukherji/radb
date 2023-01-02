@@ -209,11 +209,14 @@ static void linear_index_add_offset(linear_index_t *Store) {
 			++A;
 		} else {
 			--B;
-			linear_node_t Temp;
-			memcpy(&Temp, A, sizeof(linear_node_t));
-			memcpy(A, B, sizeof(linear_node_t));
-			memcpy(B, &Temp, sizeof(linear_node_t));
 			B->Index = NewIndex;
+			uint32_t TempValue = A->Value;
+			A->Value = B->Value;
+			B->Value = TempValue;
+			linear_key_t TempKey;
+			memcpy(TempKey, A->Key, sizeof(linear_key_t));
+			memcpy(A->Key, B->Key, sizeof(linear_key_t));
+			memcpy(B->Key, TempKey, sizeof(linear_key_t));
 		}
 	}
 	if (B == Last) {
