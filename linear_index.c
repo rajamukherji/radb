@@ -163,7 +163,7 @@ size_t linear_index_search(linear_index_t *Store, linear_key_t Key, void *Full) 
 			return INVALID_INDEX;
 		} else if (Entry->Index != Index) {
 			return INVALID_INDEX;
-		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Index)) {
+		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
 			return Entry->Value;
 		}
 	}
@@ -313,7 +313,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, linear_key_t K
 				linear_index_add_offset(Store);
 				return (linear_index_result_t){Insert, 1};
 			}
-		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Index)) {
+		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
 			return (linear_index_result_t){Entry->Value, 0};
 		}
 	}
