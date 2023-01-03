@@ -148,16 +148,9 @@ size_t linear_index_count(linear_index_t *Store) {
 	return Store->Header->Count;
 }
 
-static uint32_t linear_index_hash(linear_key_t Key) {
-	uint32_t Hash = 5381;
-	for (int I = 0; I < 16; ++I) Hash = ((Hash << 5) + Hash) + Key[I];
-	return Hash;
-}
-
 size_t linear_index_search(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
 	size_t NumOffset = Store->Header->NumOffsets;
 	size_t Scale = NumOffset > 1 ? 1 << (64 - __builtin_clzl(NumOffset - 1)) : 1;
-	if (!Hash) Hash = linear_index_hash(Key);
 	size_t Index = Hash & (Scale - 1);
 	if (Index >= NumOffset) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
@@ -169,7 +162,7 @@ size_t linear_index_search(linear_index_t *Store, uint32_t Hash, linear_key_t Ke
 			return INVALID_INDEX;
 		} else if (Entry->Index != Index) {
 			return INVALID_INDEX;
-		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
+		} else if (Entry->Hash == Hash && !memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
 			return Entry->Value;
 		}
 	}
@@ -256,7 +249,6 @@ static linear_index_result_t linear_index_add_entry(linear_index_t *Store, uint3
 linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
-	if (!Hash) Hash = linear_index_hash(Key);
 	size_t Index = Hash & (Scale - 1);
 	if (Index >= NumOffsets) Index -= (Scale >> 1);
 	linear_node_t *Nodes = Store->Header->Nodes;
@@ -322,7 +314,7 @@ linear_index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash,
 				linear_index_add_offset(Store);
 				return (linear_index_result_t){Insert, 1};
 			}
-		} else if (!memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
+		} else if (Entry->Hash == Hash && !memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
 			return (linear_index_result_t){Entry->Value, 0};
 		}
 	}
