@@ -4,8 +4,6 @@
 #include "config.h"
 #include "common.h"
 
-#include <stddef.h>
-
 #define INVALID_INDEX 0xFFFFFFFF
 
 typedef struct fixed_store_t fixed_store_t;
@@ -19,7 +17,7 @@ typedef struct {
 	radb_error_t Error;
 } fixed_store_open_t;
 
-fixed_store_open_t fixed_store_open_v2(const char *Prefix RADB_MEM_PARAMS);
+fixed_store_open_t fixed_store_open2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t fixed_store_num_entries(fixed_store_t *Store);
 

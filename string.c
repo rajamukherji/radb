@@ -1,6 +1,5 @@
 #include "string_store.h"
 #include "string_index.h"
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -107,7 +106,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	return Store;
 }
 
-string_store_open_t string_store_open_v2(const char *Prefix RADB_MEM_PARAMS) {
+string_store_open_t string_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
@@ -141,7 +140,7 @@ string_store_open_t string_store_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS) {
-	return string_store_open_v2(Prefix RADB_MEM_ARGS).Store;
+	return string_store_open2(Prefix RADB_MEM_ARGS).Store;
 }
 
 void string_store_close(string_store_t *Store) {
@@ -173,6 +172,7 @@ size_t string_store_size(string_store_t *Store, size_t Index) {
 size_t string_store_get(string_store_t *Store, size_t Index, void *Buffer, size_t Space) {
 	if (Index >= Store->Header->NumEntries) return 0;
 	size_t Length = Store->Header->Entries[Index].Length;
+	if (!Length) return Length;
 	size_t Link = Store->Header->Entries[Index].Link;
 	size_t NodeSize = Store->Header->NodeSize;
 	void *Node = Store->Data + Link * NodeSize;
@@ -754,12 +754,12 @@ typedef struct {
 	hash_t Hashes[];
 } string_index_header_v0_t;
 
-string_index_open_t string_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
+string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return (string_index_open_t){NULL, RADB_FILE_NOT_FOUND};
-	string_store_open_t KeysOpen = string_store_open_v2(Prefix RADB_MEM_ARGS);
+	string_store_open_t KeysOpen = string_store_open2(Prefix RADB_MEM_ARGS);
 	if (!KeysOpen.Store) return (string_index_open_t){NULL, KeysOpen.Error + 3};
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
@@ -802,6 +802,7 @@ string_index_open_t string_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 	} else if (Store->Header->Signature != STRING_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
 		close(Store->HeaderFd);
+		string_store_close(KeysOpen.Store);
 		return (string_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
 	Store->Keys = KeysOpen.Store;
@@ -809,7 +810,7 @@ string_index_open_t string_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 string_index_t *string_index_open(const char *Prefix RADB_MEM_PARAMS) {
-	return string_index_open_v2(Prefix RADB_MEM_ARGS).Index;
+	return string_index_open2(Prefix RADB_MEM_ARGS).Index;
 }
 
 void string_index_close(string_index_t *Store) {
@@ -887,7 +888,7 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-string_index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
+index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
 	uint32_t Hash = hash(Key, Length);
 	unsigned int Mask = Store->Header->Size - 1;
@@ -901,7 +902,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 			if (Hashes[Index].Hash == Hash) {
 				int Cmp = string_store_compare_unchecked(Store->Keys, Key, Length, Hashes[Index].Link);
 				if (Cmp < 0) break;
-				if (Cmp == 0) return (string_index_result_t){Hashes[Index].Link, 0};
+				if (Cmp == 0) return (index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
 			Index &= Mask;
@@ -922,7 +923,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return (string_index_result_t){Link, 1};
+						return (index_result_t){Link, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
@@ -940,7 +941,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return (string_index_result_t){Link, 1};
+			return (index_result_t){Link, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
 		if (Space + Store->Header->Deleted > Store->Header->Size >> 3) HashSize = Store->Header->Size;
@@ -986,7 +987,7 @@ string_index_result_t string_index_insert2(string_index_t *Store, const char *Ke
 		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
 
-	return (string_index_result_t){INVALID_INDEX, 0};
+	return (index_result_t){INVALID_INDEX, 0};
 }
 
 size_t string_index_insert(string_index_t *Store, const char *Key, size_t Length) {
@@ -1041,3 +1042,12 @@ size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length
 	return INVALID_INDEX;
 }
 
+int string_index_foreach(string_index_t *Store, void *Data, string_index_foreach_fn Callback) {
+	hash_t *Hash = Store->Header->Hashes;
+	hash_t *Limit = Hash + Store->Header->Size;
+	while (Hash < Limit) {
+		if (Hash->Link != INVALID_INDEX) if (Callback(Hash->Link, Data)) return 1;
+		++Hash;
+	}
+	return 0;
+}

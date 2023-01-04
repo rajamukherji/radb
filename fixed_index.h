@@ -4,8 +4,6 @@
 #include "config.h"
 #include "common.h"
 
-#include <stddef.h>
-
 #define INVALID_INDEX 0xFFFFFFFF
 #define DELETED_INDEX 0xFFFFFFFE
 
@@ -23,19 +21,19 @@ typedef struct {
 	radb_error_t Error;
 } fixed_index_open_t;
 
-fixed_index_open_t fixed_index_open_v2(const char *Prefix RADB_MEM_PARAMS);
+fixed_index_open_t fixed_index_open2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t fixed_index_insert(fixed_index_t *Store, const char *Key);
 size_t fixed_index_search(fixed_index_t *Store, const char *Key);
 
-typedef struct {
-	size_t Index;
-	int Created;
-} fixed_index_result_t;
-
-fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key);
+index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key);
 
 const void *fixed_index_get(fixed_index_t *Store, size_t Index);
 size_t fixed_index_delete(fixed_index_t *Store, const char *Key);
+
+uint32_t fixed_index_key_size(fixed_index_t *Store);
+
+typedef int (*fixed_index_foreach_fn)(size_t Index, void *Data);
+int fixed_index_foreach(fixed_index_t *Store, void *Data, fixed_index_foreach_fn Callback);
 
 #endif

@@ -1,6 +1,5 @@
 #include "fixed_store.h"
 #include "fixed_index.h"
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -88,7 +87,7 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	return Store;
 }
 
-fixed_store_open_t fixed_store_open_v2(const char *Prefix RADB_MEM_PARAMS) {
+fixed_store_open_t fixed_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
@@ -138,7 +137,7 @@ fixed_store_open_t fixed_store_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
-	return fixed_store_open_v2(Prefix RADB_MEM_ARGS).Store;
+	return fixed_store_open2(Prefix RADB_MEM_ARGS).Store;
 }
 
 void fixed_store_close(fixed_store_t *Store) {
@@ -357,12 +356,12 @@ fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t Chu
 	return Store;
 }
 
-fixed_index_open_t fixed_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
+fixed_index_open_t fixed_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return (fixed_index_open_t){NULL, RADB_FILE_NOT_FOUND};
-	fixed_store_open_t KeysOpen = fixed_store_open_v2(Prefix RADB_MEM_ARGS);
+	fixed_store_open_t KeysOpen = fixed_store_open2(Prefix RADB_MEM_ARGS);
 	if (!KeysOpen.Store) return (fixed_index_open_t){NULL, KeysOpen.Error + 3};
 #if defined(RADB_MEM_MALLOC)
 	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
@@ -384,6 +383,7 @@ fixed_index_open_t fixed_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 	if (Store->Header->Signature != FIXED_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
 		close(Store->HeaderFd);
+		fixed_store_close(KeysOpen.Store);
 		return (fixed_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
 	Store->Keys = KeysOpen.Store;
@@ -391,7 +391,7 @@ fixed_index_open_t fixed_index_open_v2(const char *Prefix RADB_MEM_PARAMS) {
 }
 
 fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS) {
-	return fixed_index_open_v2(Prefix RADB_MEM_ARGS).Index;
+	return fixed_index_open2(Prefix RADB_MEM_ARGS).Index;
 }
 
 void fixed_index_close(fixed_index_t *Store) {
@@ -467,7 +467,7 @@ static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }
 
-fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
+index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 	uint32_t Hash = hash(Key, Store->Header->KeySize);
 	unsigned int Mask = Store->Header->Size - 1;
 	for (;;) {
@@ -481,7 +481,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 				const void *HKey = fixed_store_get_unchecked(Store->Keys, Hashes[Index].Link);
 				int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
 				if (Cmp < 0) break;
-				if (Cmp == 0) return (fixed_index_result_t){Hashes[Index].Link, 0};
+				if (Cmp == 0) return (index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
 			Index &= Mask;
@@ -502,7 +502,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 					if (Hashes[Index].Link == INVALID_INDEX) {
 						Hashes[Index] = Old;
 						//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-						return (fixed_index_result_t){Link, 1};
+						return (index_result_t){Link, 1};
 					} else if (Hashes[Index].Hash < Old.Hash) {
 						hash_t New = Hashes[Index];
 						Hashes[Index] = Old;
@@ -522,7 +522,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 				}
 			}
 			//msync(Store->Hashes, Store->Header->HashSize * sizeof(hash_t), MS_ASYNC);
-			return (fixed_index_result_t){Link, 1};
+			return (index_result_t){Link, 1};
 		}
 		size_t HashSize = Store->Header->Size * 2;
 		if (Space + Store->Header->Deleted > Store->Header->Size >> 3) HashSize = Store->Header->Size;
@@ -569,7 +569,7 @@ fixed_index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) 
 		//msync(Store->Header, Store->HeaderSize, MS_ASYNC);
 	}
 
-	return (fixed_index_result_t){INVALID_INDEX, 0};
+	return (index_result_t){INVALID_INDEX, 0};
 }
 
 size_t fixed_index_insert(fixed_index_t *Store, const char *Key) {
@@ -622,4 +622,18 @@ size_t fixed_index_delete(fixed_index_t *Store, const char *Key) {
 		Index &= Mask;
 	}
 	return INVALID_INDEX;
+}
+
+uint32_t fixed_index_key_size(fixed_index_t *Store) {
+	return Store->Header->KeySize;
+}
+
+int fixed_index_foreach(fixed_index_t *Store, void *Data, fixed_index_foreach_fn Callback) {
+	hash_t *Hash = Store->Header->Hashes;
+	hash_t *Limit = Hash + Store->Header->Size;
+	while (Hash < Limit) {
+		if (Hash->Link != INVALID_INDEX) if (Callback(Hash->Link, Data)) return 1;
+		++Hash;
+	}
+	return 0;
 }
