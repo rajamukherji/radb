@@ -21,7 +21,9 @@ static size_t linear_insert_string(string_store_t *Store, string_key_t *Full) {
 
 string_index2_t *string_index2_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS) {
 	string_store_t *Keys = string_store_create(Prefix, KeySize, ChunkSize RADB_MEM_ARGS);
-	linear_index_t *Index = linear_index_create(Prefix, Keys, (linear_compare_t)linear_compare_string, (linear_insert_t)linear_insert_string RADB_MEM_ARGS);
+	linear_index_t *Index = linear_index_create(Prefix, Keys RADB_MEM_ARGS);
+	linear_index_set_compare(Index, (linear_compare_t)linear_compare_string);
+	linear_index_set_insert(Index, (linear_insert_t)linear_insert_string);
 	return Index;
 }
 
@@ -50,7 +52,7 @@ static int migrate(size_t Index, migration_t *Migration) {
 		unsigned char Buffer[16];
 		do {
 			Read = string_store_reader_read(&Reader, Buffer, 16);
-			for (int I = 0; I < Read; ++I) Hash = ((Hash << 5) + Hash) + Key[I];
+			for (int I = 0; I < Read; ++I) Hash = ((Hash << 5) + Hash) + Buffer[I];
 		} while (Read == 16);
 	}
 	linear_index_insert(Migration->Index, Hash, Key, &Index);
@@ -60,22 +62,25 @@ static int migrate(size_t Index, migration_t *Migration) {
 linear_index_open_t string_index2_open2(const char *Prefix RADB_MEM_PARAMS) {
 	string_store_open_t KeysOpen = string_store_open2(Prefix RADB_MEM_ARGS);
 	if (!KeysOpen.Store) return (linear_index_open_t){NULL, KeysOpen.Error + 3};
-	linear_index_open_t IndexOpen = linear_index_open2(Prefix, KeysOpen.Store, (linear_compare_t)linear_compare_string, (linear_insert_t)linear_insert_string RADB_MEM_ARGS);
-	if (IndexOpen.Error == RADB_HEADER_MISMATCH) {
+	linear_index_open_t IndexOpen = linear_index_open2(Prefix, KeysOpen.Store RADB_MEM_ARGS);
+	if (IndexOpen.Error == RADB_FILE_NOT_FOUND) {
 		string_index_open_t OldOpen = string_index_open2(Prefix RADB_MEM_ARGS);
 		if (OldOpen.Error != RADB_SUCCESS) {
 			string_store_close(KeysOpen.Store);
 			return IndexOpen;
 		}
-		linear_index_t *NewIndex = linear_index_create(Prefix, KeysOpen.Store, (linear_compare_t)migrate_compare_string, (linear_insert_t)migrate_insert_string RADB_MEM_ARGS);
+		linear_index_t *NewIndex = linear_index_create(Prefix, KeysOpen.Store RADB_MEM_ARGS);
+		linear_index_set_compare(NewIndex, (linear_compare_t)migrate_compare_string);
+		linear_index_set_insert(NewIndex, (linear_insert_t)migrate_insert_string);
 		migration_t Migration = {NewIndex, KeysOpen.Store};
 		string_index_foreach(OldOpen.Index, &Migration, (void *)migrate);
 		string_index_close(OldOpen.Index);
-		linear_index_close(NewIndex);
-		IndexOpen.Index = linear_index_open(Prefix, KeysOpen.Store, (linear_compare_t)linear_compare_string, (linear_insert_t)linear_insert_string RADB_MEM_ARGS);
+		IndexOpen.Index = NewIndex;
 		IndexOpen.Error = RADB_SUCCESS;
 	}
 	if (IndexOpen.Error != RADB_SUCCESS) string_store_close(KeysOpen.Store);
+	linear_index_set_compare(IndexOpen.Index, (linear_compare_t)linear_compare_string);
+	linear_index_set_insert(IndexOpen.Index, (linear_insert_t)linear_insert_string);
 	return IndexOpen;
 }
 

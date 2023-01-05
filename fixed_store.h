@@ -28,4 +28,11 @@ void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t
 size_t fixed_store_alloc(fixed_store_t *Store);
 void fixed_store_free(fixed_store_t *Store, size_t Index);
 
+typedef struct {
+	void *Value;
+	size_t Index;
+} fixed_store_alloc_t;
+
+fixed_store_alloc_t fixed_store_alloc2(fixed_store_t *Store);
+
 #endif

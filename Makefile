@@ -13,7 +13,7 @@ CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
 ifdef DEBUG
 	CFLAGS += -g -DGC_DEBUG -DDEBUG
 else
-	CFLAGS += -O3 -g
+	CFLAGS += -O3 -g -momit-leaf-frame-pointer -foptimize-sibling-calls -fcf-protection=none -fno-stack-protector -march=native -mtune=native -mno-sse2 -mno-align-stringops -minline-all-stringops -fno-tree-loop-distribute-patterns
 endif
 
 ifeq ($(RADB_MEM), MALLOC)

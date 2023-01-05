@@ -58,7 +58,9 @@ static inline const char *radb_strdup(const char *String, void *Allocator, void 
 #define LINEAR_INDEX_SIGNATURE 0x494C4152
 #define LINEAR_INDEX_VERSION MAKE_VERSION(1, 0)
 
-linear_index_t *linear_index_create(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS) {
+#define PAGE_SIZE 4096
+
+linear_index_t *linear_index_create(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
 #if defined(RADB_MEM_MALLOC)
 	linear_index_t *Store = malloc(sizeof(linear_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -74,29 +76,27 @@ linear_index_t *linear_index_create(const char *Prefix, void *Keys, linear_compa
 	Store->free = free;
 #endif
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.index", Prefix);
+	sprintf(FileName, "%s.index2", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
-	Store->HeaderSize = 512;
+	Store->HeaderSize = PAGE_SIZE;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	Store->Header->Signature = LINEAR_INDEX_SIGNATURE;
 	Store->Header->Version = LINEAR_INDEX_VERSION;
-	Store->Header->NumNodes = (512 - sizeof(linear_header_t)) / sizeof(linear_node_t);
+	Store->Header->NumNodes = (PAGE_SIZE - sizeof(linear_header_t)) / sizeof(linear_node_t);
 	Store->Header->NumOffsets = 1;
 	Store->Header->NumEntries = 0;
 	Store->Header->NextFree = INVALID_INDEX;
 	Store->Header->Count = 0;
 	Store->Header->Nodes[0].Index = INVALID_INDEX;
 	Store->Keys = Keys;
-	Store->Compare = Compare;
-	Store->Insert = Insert;
 	return Store;
 }
 
-linear_index_open_t linear_index_open2(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS) {
+linear_index_open_t linear_index_open2(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.index", Prefix);
+	sprintf(FileName, "%s.index2", Prefix);
 	if (stat(FileName, Stat)) return (linear_index_open_t){NULL, RADB_FILE_NOT_FOUND};
 #if defined(RADB_MEM_MALLOC)
 	linear_index_t *Store = malloc(sizeof(linear_index_t));
@@ -121,13 +121,11 @@ linear_index_open_t linear_index_open2(const char *Prefix, void *Keys, linear_co
 		return (linear_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
 	Store->Keys = Keys;
-	Store->Compare = Compare;
-	Store->Insert = Insert;
 	return (linear_index_open_t){Store, RADB_SUCCESS};
 }
 
-linear_index_t *linear_index_open(const char *Prefix, void *Keys, linear_compare_t Compare, linear_insert_t Insert RADB_MEM_PARAMS) {
-	return linear_index_open2(Prefix, Keys, Compare, Insert RADB_MEM_ARGS).Index;
+linear_index_t *linear_index_open(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
+	return linear_index_open2(Prefix, Keys RADB_MEM_ARGS).Index;
 }
 
 void linear_index_close(linear_index_t *Store) {
@@ -142,6 +140,14 @@ void linear_index_close(linear_index_t *Store) {
 	Store->free(Store->Allocator, (void *)Store->Prefix);
 	Store->free(Store->Allocator, Store);
 #endif
+}
+
+void linear_index_set_compare(linear_index_t *Store, linear_compare_t Compare) {
+	Store->Compare = Compare;
+}
+
+void linear_index_set_insert(linear_index_t *Store, linear_insert_t Insert) {
+	Store->Insert = Insert;
 }
 
 void linear_index_set_extra(linear_index_t *Store, uint32_t Value) {
@@ -160,7 +166,7 @@ size_t linear_index_count(linear_index_t *Store) {
 	return Store->Header->Count;
 }
 
-size_t linear_index_search(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
+size_t linear_index_search(linear_index_t *Store, uint32_t Hash, const linear_key_t Key, const void *Full) {
 	size_t NumOffset = Store->Header->NumOffsets;
 	size_t Scale = NumOffset > 1 ? 1 << (64 - __builtin_clzl(NumOffset - 1)) : 1;
 	size_t Index = Hash & (Scale - 1);
@@ -184,7 +190,7 @@ size_t linear_index_search(linear_index_t *Store, uint32_t Hash, linear_key_t Ke
 static linear_node_t *linear_index_grow_nodes(linear_index_t *Store, size_t Target) {
 	if (Target > Store->Header->NumNodes) {
 		size_t Required = Target - Store->Header->NumNodes;
-		size_t Allocation = ((Required * sizeof(linear_node_t) + 511) / 512) * 512;
+		size_t Allocation = ((Required * sizeof(linear_node_t) + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
 		size_t HeaderSize = Store->HeaderSize + Allocation;
 		ftruncate(Store->HeaderFd, HeaderSize);
 #ifdef Linux
@@ -246,7 +252,7 @@ static void linear_index_add_offset(linear_index_t *Store) {
 	}
 }
 
-static index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Index, uint32_t Hash, linear_key_t Key, void *Full) {
+static index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Index, uint32_t Hash, const linear_key_t Key, const void *Full) {
 	linear_node_t *Nodes = linear_index_grow_nodes(Store, Store->Header->NumEntries + 1);
 	size_t Offset = Store->Header->NumEntries++;
 	linear_node_t *Entry = Nodes + Offset;
@@ -258,7 +264,7 @@ static index_result_t linear_index_add_entry(linear_index_t *Store, uint32_t Ind
 	return (index_result_t){Insert, 1};
 }
 
-index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
+index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash, const linear_key_t Key, const void *Full) {
 	size_t NumOffsets = Store->Header->NumOffsets;
 	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
 	size_t Index = Hash & (Scale - 1);
@@ -334,6 +340,6 @@ index_result_t linear_index_insert2(linear_index_t *Store, uint32_t Hash, linear
 	return linear_index_add_entry(Store, Index, Hash, Key, Full);
 }
 
-size_t linear_index_insert(linear_index_t *Store, uint32_t Hash, linear_key_t Key, void *Full) {
+size_t linear_index_insert(linear_index_t *Store, uint32_t Hash, const linear_key_t Key, const void *Full) {
 	return linear_index_insert2(Store, Hash, Key, Full).Index;
 }

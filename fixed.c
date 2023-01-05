@@ -259,9 +259,10 @@ void fixed_store_shift(fixed_store_t *Store, size_t Source, size_t Count, size_t
 	}
 }
 
-size_t fixed_store_alloc(fixed_store_t *Store) {
+fixed_store_alloc_t fixed_store_alloc2(fixed_store_t *Store) {
 	size_t FreeEntry = Store->Header->FreeEntry;
-	size_t Next = *(uint32_t *)(Store->Header->Nodes + FreeEntry * Store->Header->NodeSize);
+	void *Value = Store->Header->Nodes + FreeEntry * Store->Header->NodeSize;
+	size_t Next = *(uint32_t *)Value;
 	if (Next == INVALID_INDEX) {
 		Next = FreeEntry + 1;
 		if (Next >= Store->Header->NumEntries) {
@@ -279,11 +280,16 @@ size_t fixed_store_alloc(fixed_store_t *Store) {
 #endif
 			Store->Header->NumEntries += NumEntries;
 			Store->HeaderSize = HeaderSize;
+			Value = Store->Header->Nodes + FreeEntry * Store->Header->NodeSize;
 		}
 		*(uint32_t *)(Store->Header->Nodes + Next * Store->Header->NodeSize) = INVALID_INDEX;
 	}
 	Store->Header->FreeEntry = Next;
-	return FreeEntry;
+	return (fixed_store_alloc_t){Value, FreeEntry};
+}
+
+size_t fixed_store_alloc(fixed_store_t *Store) {
+	return fixed_store_alloc2(Store).Index;
 }
 
 void fixed_store_free(fixed_store_t *Store, size_t Index) {
