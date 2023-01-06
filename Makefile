@@ -73,6 +73,7 @@ install_h = \
 	$(install_include)/linear_index.h \
 	$(install_include)/string_index2.h \
 	$(install_include)/fixed_index2.h \
+	$(install_include)/linear_index0.h \
 	$(install_include)/string_index0.h
 
 install_a = $(install_lib)/libradb.a
