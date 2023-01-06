@@ -105,6 +105,7 @@ static uint32_t string_hash(const char *String, size_t Length) {
 }
 
 size_t string_index2_insert(string_index2_t *Store, const char *String, size_t Length) {
+	if (!Length) Length = strlen(Key);
 	uint32_t Hash = string_hash(String, Length);
 	string_key_t Full = {String, Length};
 	linear_key_t Key = {0,};
@@ -118,6 +119,7 @@ size_t string_index2_insert(string_index2_t *Store, const char *String, size_t L
 }
 
 size_t string_index2_search(string_index2_t *Store, const char *String, size_t Length) {
+	if (!Length) Length = strlen(Key);
 	uint32_t Hash = string_hash(String, Length);
 	string_key_t Full = {String, Length};
 	linear_key_t Key = {0,};
@@ -131,6 +133,7 @@ size_t string_index2_search(string_index2_t *Store, const char *String, size_t L
 }
 
 index_result_t string_index2_insert2(string_index2_t *Store, const char *String, size_t Length) {
+	if (!Length) Length = strlen(Key);
 	uint32_t Hash = string_hash(String, Length);
 	string_key_t Full = {String, Length};
 	linear_key_t Key = {0,};
