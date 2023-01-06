@@ -1,5 +1,5 @@
-#ifndef LINEAR_INDEX_H
-#define LINEAR_INDEX_H
+#ifndef LINEAR_INDEX0_H
+#define LINEAR_INDEX0_H
 
 #include "config.h"
 #include "common.h"
