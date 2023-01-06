@@ -72,7 +72,7 @@ fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size
 	int NumEntries = (ChunkSize - sizeof(fixed_store_header_t) + NodeSize - 1) / NodeSize;
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
-	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	Store->HeaderSize = sizeof(fixed_store_header_t) + NumEntries * NodeSize;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -346,7 +346,7 @@ fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t Chu
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.index", Prefix);
-	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	Store->HeaderSize = sizeof(fixed_index_header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -538,7 +538,7 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 		sprintf(FileName2, "%s.temp", Store->Prefix);
 
 		size_t HeaderSize = sizeof(fixed_index_header_t) + HashSize * sizeof(hash_t);
-		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
+		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
 		ftruncate(HeaderFd, HeaderSize);
 		fixed_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = FIXED_INDEX_SIGNATURE;

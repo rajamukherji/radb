@@ -77,7 +77,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	int NumNodes = (ChunkSize + NodeSize - 1) / NodeSize;
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
-	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	Store->HeaderSize = sizeof(string_store_header_t) + NumEntries * sizeof(entry_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -95,7 +95,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 		Store->Header->Entries[I].Length = 0;
 	}
 	sprintf(FileName, "%s.data", Prefix);
-	Store->DataFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->DataFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	ftruncate(Store->DataFd, NumNodes * NodeSize);
 	Store->Data = mmap(NULL, Store->Header->NumNodes * Store->Header->NodeSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->DataFd, 0);
 	for (int I = 1; I <= NumNodes; ++I) {
@@ -223,8 +223,6 @@ int string_store_compare(string_store_t *Store, const void *Other, size_t Length
 }
 
 static int string_store_compare2_unchecked(string_store_t *Store, size_t Index1, size_t Index2) {
-	if (Index1 >= Store->Header->NumEntries) return -1;
-	if (Index2 >= Store->Header->NumEntries) return 1;
 	size_t Length1 = Store->Header->Entries[Index1].Length;
 	size_t Length2 = Store->Header->Entries[Index2].Length;
 	size_t Link1 = Store->Header->Entries[Index1].Link;
@@ -265,7 +263,7 @@ static int string_store_compare2_unchecked(string_store_t *Store, size_t Index1,
 	} else if (Length1 > Length2) {
 		return memcmp(Node1, Node2, Length2) ?: 1;
 	} else if (Length2 > Length1) {
-		return memcmp(Node1, Node2, Length1) ?: 1;
+		return memcmp(Node1, Node2, Length1) ?: -1;
 	} else {
 		return memcmp(Node1, Node2, Length1);
 	}
@@ -734,7 +732,7 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	char FileName[strlen(Prefix) + 10];
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.index", Prefix);
-	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT, 0777);
+	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	Store->HeaderSize = sizeof(string_index_header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -784,7 +782,7 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		sprintf(FileName2, "%s.temp", Store->Prefix);
 		uint32_t HashSize = HeaderV0->Size;
 		size_t HeaderSize = sizeof(string_index_header_t) + HashSize * sizeof(hash_t);
-		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
+		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
 		ftruncate(HeaderFd, HeaderSize);
 		string_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = STRING_INDEX_SIGNATURE;
@@ -901,7 +899,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 			if (Hashes[Index].Hash < Hash) break;
 			if (Hashes[Index].Hash == Hash) {
 				int Cmp = string_store_compare_unchecked(Store->Keys, Key, Length, Hashes[Index].Link);
-				if (Cmp < 0) break;
+				if (Cmp > 0) break;
 				if (Cmp == 0) return (index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
@@ -951,7 +949,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 		sprintf(FileName2, "%s.temp", Store->Prefix);
 
 		size_t HeaderSize = sizeof(string_index_header_t) + HashSize * sizeof(hash_t);
-		int HeaderFd = open(FileName2, O_RDWR | O_CREAT, 0777);
+		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
 		ftruncate(HeaderFd, HeaderSize);
 		string_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = STRING_INDEX_SIGNATURE;
@@ -1006,7 +1004,7 @@ size_t string_index_search(string_index_t *Store, const char *Key, size_t Length
 		if (Hashes[Index].Hash < Hash) break;
 		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
 			int Cmp = string_store_compare_unchecked(Store->Keys, Key, Length, Hashes[Index].Link);
-			if (Cmp < 0) break;
+			if (Cmp > 0) break;
 			if (Cmp == 0) return Hashes[Index].Link;
 		}
 		Index += Incr;
@@ -1027,7 +1025,7 @@ size_t string_index_delete(string_index_t *Store, const char *Key, size_t Length
 		if (Hashes[Index].Hash < Hash) break;
 		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
 			int Cmp = string_store_compare_unchecked(Store->Keys, Key, Length, Hashes[Index].Link);
-			if (Cmp < 0) break;
+			if (Cmp > 0) break;
 			if (Cmp == 0) {
 				uint32_t Link = Hashes[Index].Link;
 				string_store_free(Store->Keys, Link);
