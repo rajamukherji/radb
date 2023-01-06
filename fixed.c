@@ -486,7 +486,7 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 			if (Hashes[Index].Hash == Hash) {
 				const void *HKey = fixed_store_get_unchecked(Store->Keys, Hashes[Index].Link);
 				int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
-				if (Cmp < 0) break;
+				if (Cmp > 0) break;
 				if (Cmp == 0) return (index_result_t){Hashes[Index].Link, 0};
 			}
 			Index += Incr;
@@ -594,7 +594,7 @@ size_t fixed_index_search(fixed_index_t *Store, const char *Key) {
 		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
 			const void *HKey = fixed_store_get_unchecked(Store->Keys, Hashes[Index].Link);
 			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
-			if (Cmp < 0) break;
+			if (Cmp > 0) break;
 			if (Cmp == 0) return Hashes[Index].Link;
 		}
 		Index += Incr;
@@ -615,7 +615,7 @@ size_t fixed_index_delete(fixed_index_t *Store, const char *Key) {
 		if (Hashes[Index].Hash == Hash && Hashes[Index].Link != DELETED_INDEX) {
 			const void *HKey = fixed_store_get_unchecked(Store->Keys, Hashes[Index].Link);
 			int Cmp = memcmp(Key, HKey, Store->Header->KeySize);
-			if (Cmp < 0) break;
+			if (Cmp > 0) break;
 			if (Cmp == 0) {
 				uint32_t Link = Hashes[Index].Link;
 				fixed_store_free(Store->Keys, Link);
