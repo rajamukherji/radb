@@ -75,7 +75,7 @@ linear_index0_t *linear_index0_create(const char *Prefix, void *Keys RADB_MEM_PA
 	Store->free = free;
 #endif
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.index2", Prefix);
+	sprintf(FileName, "%sindex0", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
 	Store->HeaderSize = PAGE_SIZE;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
@@ -95,7 +95,7 @@ linear_index0_t *linear_index0_create(const char *Prefix, void *Keys RADB_MEM_PA
 linear_index0_open_t linear_index0_open2(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
-	sprintf(FileName, "%s.index2", Prefix);
+	sprintf(FileName, "%sindex0", Prefix);
 	if (stat(FileName, Stat)) return (linear_index0_open_t){NULL, RADB_FILE_NOT_FOUND};
 #if defined(RADB_MEM_MALLOC)
 	linear_index0_t *Store = malloc(sizeof(linear_index0_t));
