@@ -332,3 +332,45 @@ index_result_t linear_index0_insert2(linear_index0_t *Store, uint32_t Hash, cons
 size_t linear_index0_insert(linear_index0_t *Store, uint32_t Hash, const void *Full) {
 	return linear_index0_insert2(Store, Hash, Full).Index;
 }
+index_result_t linear_index0_delete2(linear_index0_t *Store, uint32_t Hash, const void *Full) {
+	size_t NumOffsets = Store->Header->NumOffsets;
+	size_t Scale = NumOffsets > 1 ? 1 << (64 - __builtin_clzl(NumOffsets - 1)) : 1;
+	size_t Index = Hash & (Scale - 1);
+	if (Index >= NumOffsets) Index -= (Scale >> 1);
+	linear_node0_t *Nodes = Store->Header->Nodes;
+	size_t Offset = Nodes[Index].Offset;
+	if (Offset == INVALID_INDEX) return (index_result_t){INVALID_INDEX, 0};
+	linear_node0_t *Last = Nodes + Store->Header->NumEntries;
+	for (linear_node0_t *Entry = Nodes + Offset; Entry < Last; ++Entry) {
+		if (Entry->Index == INVALID_INDEX) {
+			return (index_result_t){INVALID_INDEX, 0};
+		} else if (Entry->Index != Index) {
+			return (index_result_t){INVALID_INDEX, 0};
+		} else if (Entry->Hash == Hash && !Store->Compare(Store->Keys, Full, Entry->Value)) {
+			uint32_t Value = Entry->Value;
+			linear_node0_t *Base = Nodes + Offset;
+			if (Entry > Base) {
+				Entry->Hash = Base->Hash;
+				Entry->Value = Base->Value;
+				Base->Index = INVALID_INDEX;
+				Nodes[Index].Offset = Offset + 1;
+			} else if ((Entry + 1) == Last) {
+				Entry->Index = INVALID_INDEX;
+				Nodes[Index].Offset = INVALID_INDEX;
+				--Store->Header->NumEntries;
+			} else if (Entry[1].Index != Index) {
+				Entry->Index = INVALID_INDEX;
+				Nodes[Index].Offset = INVALID_INDEX;
+			} else {
+				Entry->Index = INVALID_INDEX;
+				Nodes[Index].Offset = Offset + 1;
+			}
+			return (index_result_t){Value, 1};
+		}
+	}
+	return (index_result_t){INVALID_INDEX, 0};
+}
+
+size_t linear_index0_delete(linear_index0_t *Store, uint32_t Hash, const void *Full) {
+	return linear_index0_delete2(Store, Hash, Full).Index;
+}
