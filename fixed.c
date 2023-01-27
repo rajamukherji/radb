@@ -133,6 +133,10 @@ fixed_store_open_t fixed_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 			}
 		}
 	}
+	if (Store->Header->FreeEntry >= Store->Header->NumEntries) {
+		fixed_store_close(Store);
+		return (fixed_store_open_t){NULL, RADB_HEADER_CORRUPTED};
+	}
 	return (fixed_store_open_t){Store, RADB_SUCCESS};
 }
 
