@@ -207,6 +207,7 @@ static linear_node_t *linear_index_grow_nodes(linear_index_t *Store, size_t Targ
 
 static void linear_index_add_offset(linear_index_t *Store) {
 	size_t NumOffsets = Store->Header->NumOffsets;
+	if (NumOffsets >= Store->Header->Count) return;
 	size_t Scale = 1 << (64 - __builtin_clzl(NumOffsets));
 	size_t Shift = Scale >> 1;
 	size_t Index = Scale > NumOffsets ? NumOffsets - Shift : NumOffsets & (Scale - 1);
@@ -359,6 +360,7 @@ index_result_t linear_index_delete2(linear_index_t *Store, uint32_t Hash, const 
 		} else if (Entry->Index != Index) {
 			return (index_result_t){INVALID_INDEX, 0};
 		} else if (Entry->Hash == Hash && !memcmp(Entry->Key, Key, sizeof(linear_key_t)) && !Store->Compare(Store->Keys, Full, Entry->Value)) {
+			--Store->Header->Count;
 			uint32_t Value = Entry->Value;
 			linear_node_t *Base = Nodes + Offset;
 			if (Entry > Base) {
