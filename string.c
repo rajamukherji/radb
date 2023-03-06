@@ -547,7 +547,7 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 		Store->Header->FreeNode = FreeStart;
 	}
 	Writer->Store = Store;
-	Writer->Node = SIZE_MAX;
+	Writer->Node = INVALID_INDEX;
 	Writer->Index = Index;
 	Store->Header->Entries[Index].Length = 0;
 	Store->Header->Entries[Index].Link = INVALID_INDEX;
@@ -586,7 +586,7 @@ size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buff
 	size_t NodeSize = Store->Header->NodeSize;
 	size_t NodeIndex = Writer->Node;
 	size_t Remain = Length, Offset, Space;
-	if (NodeIndex == SIZE_MAX) {
+	if (NodeIndex == INVALID_INDEX) {
 		NodeIndex = string_store_node_alloc(Store, NodeSize);
 		Store->Header->Entries[Writer->Index].Link = NodeIndex;
 		Space = NodeSize;
@@ -643,7 +643,7 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 	string_store_t *Store = Reader->Store;
 	size_t NodeSize = Store->Header->NodeSize;
 	size_t NodeIndex = Reader->Node;
-	if (NodeIndex == SIZE_MAX) return 0;
+	if (NodeIndex == INVALID_INDEX) return 0;
 	size_t Offset = Reader->Offset;
 	size_t Remain = Reader->Remain;
 	size_t Copied = 0;
@@ -659,7 +659,7 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 				return Copied + Length;
 			} else {
 				memcpy(Buffer, Node + Offset, Remain);
-				Reader->Node = SIZE_MAX;
+				Reader->Node = INVALID_INDEX;
 				return Copied + Remain;
 			}
 		} else {
