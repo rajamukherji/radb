@@ -41,6 +41,7 @@ struct string_store_writer_t {
 };
 
 void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Store, size_t Index);
+void string_store_writer_append(string_store_writer_t *Writer, string_store_t *Store, size_t Index);
 size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buffer, size_t Length);
 
 struct string_store_reader_t {

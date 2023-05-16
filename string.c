@@ -553,6 +553,47 @@ void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Sto
 	Store->Header->Entries[Index].Link = INVALID_INDEX;
 }
 
+void string_store_writer_append(string_store_writer_t *Writer, string_store_t *Store, size_t Index) {
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += 512 - 1;
+		NumEntries /= 512;
+		NumEntries *= 512;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = INVALID_INDEX;
+			Entries[I].Length = 0;
+		}
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	Writer->Store = Store;
+	Writer->Index = Index;
+	size_t NodeIndex = Store->Header->Entries[Index].Link;
+	if (NodeIndex != INVALID_INDEX) {
+		size_t NodeSize = Store->Header->NodeSize;
+		size_t Offset = Store->Header->Entries[Index].Length;
+		while (Offset > NodeSize) {
+			void *Node = Store->Data + NodeSize * NodeIndex;
+			NodeIndex = NODE_LINK(Node);
+			Offset -= (NodeSize - 4);
+		}
+		Writer->Node = NodeIndex;
+		Writer->Remain = NodeSize - Offset;
+	} else {
+		Writer->Node = INVALID_INDEX;
+	}
+}
+
+
 static inline size_t string_store_node_alloc(string_store_t *Store, size_t NodeSize) {
 	if (!Store->Header->NumFreeNodes) {
 		size_t NumNodes = Store->Header->ChunkSize;
