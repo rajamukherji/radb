@@ -20,6 +20,7 @@ typedef struct {
 fixed_store_open_t fixed_store_open2(const char *Prefix RADB_MEM_PARAMS);
 
 size_t fixed_store_num_entries(fixed_store_t *Store);
+size_t fixed_store_node_size(fixed_store_t *Store);
 
 void *fixed_store_get(fixed_store_t *Store, size_t Index);
 

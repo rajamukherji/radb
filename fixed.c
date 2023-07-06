@@ -162,6 +162,10 @@ size_t fixed_store_num_entries(fixed_store_t *Store) {
 	return Store->Header->NumEntries;
 }
 
+size_t fixed_store_node_size(fixed_store_t *Store) {
+	return Store->Header->NodeSize;
+}
+
 static void *fixed_store_get_unchecked(fixed_store_t *Store, size_t Index) {
 	return Store->Header->Nodes + Index * Store->Header->NodeSize;
 }
