@@ -166,14 +166,17 @@ size_t string_store_num_entries(string_store_t *Store) {
 
 size_t string_store_size(string_store_t *Store, size_t Index) {
 	if (Index >= Store->Header->NumEntries) return 0;
+	size_t Link = Store->Header->Entries[Index].Link;
+	if (Link == INVALID_INDEX) return 0;
 	return Store->Header->Entries[Index].Length;
 }
 
 size_t string_store_get(string_store_t *Store, size_t Index, void *Buffer, size_t Space) {
 	if (Index >= Store->Header->NumEntries) return 0;
+	size_t Link = Store->Header->Entries[Index].Link;
+	if (Link == INVALID_INDEX) return 0;
 	size_t Length = Store->Header->Entries[Index].Length;
 	if (!Length) return Length;
-	size_t Link = Store->Header->Entries[Index].Link;
 	size_t NodeSize = Store->Header->NodeSize;
 	void *Node = Store->Data + Link * NodeSize;
 	size_t Total = (Space < Length) ? Space : Length;
