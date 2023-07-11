@@ -7,13 +7,13 @@ all: libradb.a
 
 *.o: *.h
 
-CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
+override CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
 	-I. -DGC_THREADS -D_GNU_SOURCE -D$(PLATFORM)
 
 ifdef DEBUG
-	CFLAGS += -g -DGC_DEBUG -DDEBUG
+	override CFLAGS += -g -DGC_DEBUG -DDEBUG
 else
-	CFLAGS += -O3 -g -momit-leaf-frame-pointer -foptimize-sibling-calls -fno-stack-protector -march=native -mtune=native -mno-sse2 -minline-all-stringops
+	override CFLAGS += -O3 -g -momit-leaf-frame-pointer -foptimize-sibling-calls -fno-stack-protector -march=native -mtune=native -mno-sse2 -minline-all-stringops
 endif
 
 ifeq ($(RADB_MEM), MALLOC)
@@ -32,17 +32,17 @@ common_objects = string.o fixed.o common.o linear_index.o string_index2.o fixed_
 platform_objects =
 
 ifeq ($(MACHINE), i686)
-	CFLAGS += -fno-pic
+	override CFLAGS += -fno-pic
 endif
 
 ifeq ($(PLATFORM), Linux)
 	platform_objects +=
-	CFLAGS += -fcf-protection=none -mno-align-stringops -fno-tree-loop-distribute-patterns
+	override CFLAGS += -fcf-protection=none -mno-align-stringops -fno-tree-loop-distribute-patterns
 endif
 
 ifeq ($(PLATFORM), FreeBSD)
 	platform_objects += 
-	CFLAGS += -I/usr/local/include
+	override CFLAGS += -I/usr/local/include
 endif
 
 ifeq ($(PLATFORM), Darwin)
