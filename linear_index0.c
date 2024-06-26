@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 typedef struct {
 	uint32_t Offset;
@@ -38,6 +39,28 @@ struct linear_index0_t {
 	size_t HeaderSize;
 	int HeaderFd;
 };
+
+static int lock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_WRLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error locking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
+static int unlock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_UNLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error unlocking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
 
 #ifdef RADB_MEM_GC
 #include <gc/gc.h>
@@ -77,6 +100,7 @@ linear_index0_t *linear_index0_create(const char *Prefix, void *Keys RADB_MEM_PA
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index2", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = PAGE_SIZE;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -112,10 +136,12 @@ linear_index0_open_t linear_index0_open2(const char *Prefix, void *Keys RADB_MEM
 	Store->free = free;
 #endif
 	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != LINEAR_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		return (linear_index0_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
@@ -130,6 +156,7 @@ linear_index0_t *linear_index0_open(const char *Prefix, void *Keys RADB_MEM_PARA
 void linear_index0_close(linear_index0_t *Store) {
 	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
+	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);

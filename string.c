@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #ifdef RADB_MEM_GC
 #include <gc/gc.h>
@@ -55,6 +56,28 @@ struct string_store_t {
 
 #define NODE_LINK(Node) (*(uint32_t *)(Node + NodeSize - 4))
 
+static int lock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_WRLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error locking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
+static int unlock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_UNLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error unlocking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
 string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS) {
 #if defined(RADB_MEM_MALLOC)
 	string_store_t *Store = malloc(sizeof(string_store_t));
@@ -78,6 +101,7 @@ string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, si
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = sizeof(string_store_header_t) + NumEntries * sizeof(entry_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -111,6 +135,11 @@ string_store_open_t string_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.entries", Prefix);
 	if (stat(FileName, Stat)) return (string_store_open_t){NULL, RADB_FILE_NOT_FOUND};
+	int HeaderFd = open(FileName, O_RDWR, 0777);
+	if (lock_file(HeaderFd)) {
+		close(HeaderFd);
+		return (string_store_open_t){NULL, RADB_FILE_LOCKED};
+	}
 #if defined(RADB_MEM_MALLOC)
 	string_store_t *Store = malloc(sizeof(string_store_t));
 	Store->Prefix = strdup(Prefix);
@@ -125,11 +154,12 @@ string_store_open_t string_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	Store->HeaderFd = HeaderFd;
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != STRING_STORE_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		return (string_store_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
@@ -149,6 +179,7 @@ void string_store_close(string_store_t *Store) {
 	munmap(Store->Data, Store->Header->NumNodes * Store->Header->NodeSize);
 	munmap(Store->Header, Store->HeaderSize);
 	close(Store->DataFd);
+	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);
@@ -777,6 +808,7 @@ string_index_t *string_index_create(const char *Prefix, size_t KeySize, size_t C
 	Store->SyncCounter = 32;
 	sprintf(FileName, "%s.index", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = sizeof(string_index_header_t) + 64 * sizeof(hash_t);
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -801,6 +833,11 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index", Prefix);
 	if (stat(FileName, Stat)) return (string_index_open_t){NULL, RADB_FILE_NOT_FOUND};
+	int HeaderFd = open(FileName, O_RDWR, 0777);
+	if (lock_file(HeaderFd)) {
+		close(HeaderFd);
+		return (string_index_open_t){NULL, RADB_FILE_LOCKED};
+	}
 	string_store_open_t KeysOpen = string_store_open2(Prefix RADB_MEM_ARGS);
 	if (!KeysOpen.Store) return (string_index_open_t){NULL, KeysOpen.Error + 3};
 #if defined(RADB_MEM_MALLOC)
@@ -817,7 +854,8 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	Store->HeaderFd = HeaderFd;
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Version == MAKE_VERSION(1, 0)) {
@@ -827,6 +865,7 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		uint32_t HashSize = HeaderV0->Size;
 		size_t HeaderSize = sizeof(string_index_header_t) + HashSize * sizeof(hash_t);
 		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
+		lock_file(Store->HeaderFd);
 		ftruncate(HeaderFd, HeaderSize);
 		string_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = STRING_INDEX_SIGNATURE;
@@ -836,6 +875,7 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		Header->Deleted = 0;
 		memcpy(Header->Hashes, HeaderV0->Hashes, HashSize * sizeof(hash_t));
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		rename(FileName2, FileName);
 		Store->HeaderSize = HeaderSize;
@@ -843,6 +883,7 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		Store->HeaderFd = HeaderFd;
 	} else if (Store->Header->Signature != STRING_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		string_store_close(KeysOpen.Store);
 		return (string_index_open_t){NULL, RADB_HEADER_MISMATCH};
@@ -859,6 +900,7 @@ void string_index_close(string_index_t *Store) {
 	string_store_close(Store->Keys);
 	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
+	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);
@@ -994,6 +1036,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 
 		size_t HeaderSize = sizeof(string_index_header_t) + HashSize * sizeof(hash_t);
 		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
+		lock_file(Store->HeaderFd);
 		ftruncate(HeaderFd, HeaderSize);
 		string_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = STRING_INDEX_SIGNATURE;
@@ -1016,6 +1059,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 		}
 
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 
 		char FileName[strlen(Store->Prefix) + 10];

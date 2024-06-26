@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 typedef struct {
 	uint32_t Offset;
@@ -39,6 +40,28 @@ struct linear_index_t {
 	size_t HeaderSize;
 	int HeaderFd;
 };
+
+static int lock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_WRLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error locking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
+static int unlock_file(int Fd) {
+	struct flock Lock = {0,};
+	Lock.l_type = F_UNLCK;
+	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
+		fprintf(stderr, "Error unlocking file: %s", strerror(errno));
+		return -1;
+	} else {
+		return 0;
+	}
+}
 
 #ifdef RADB_MEM_GC
 #include <gc/gc.h>
@@ -78,6 +101,7 @@ linear_index_t *linear_index_create(const char *Prefix, void *Keys RADB_MEM_PARA
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index2", Prefix);
 	Store->HeaderFd = open(FileName, O_RDWR | O_CREAT | O_TRUNC, 0777);
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = PAGE_SIZE;
 	ftruncate(Store->HeaderFd, Store->HeaderSize);
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
@@ -98,6 +122,11 @@ linear_index_open_t linear_index_open2(const char *Prefix, void *Keys RADB_MEM_P
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index2", Prefix);
 	if (stat(FileName, Stat)) return (linear_index_open_t){NULL, RADB_FILE_NOT_FOUND};
+	int HeaderFd = open(FileName, O_RDWR, 0777);
+	if (lock_file(HeaderFd)) {
+		close(HeaderFd);
+		return (linear_index_open_t){NULL, RADB_FILE_LOCKED};
+	}
 #if defined(RADB_MEM_MALLOC)
 	linear_index_t *Store = malloc(sizeof(linear_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -112,11 +141,13 @@ linear_index_open_t linear_index_open2(const char *Prefix, void *Keys RADB_MEM_P
 	Store->alloc_atomic = alloc_atomic;
 	Store->free = free;
 #endif
-	Store->HeaderFd = open(FileName, O_RDWR, 0777);
+	Store->HeaderFd = HeaderFd;
+	lock_file(Store->HeaderFd);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != LINEAR_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
+		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		return (linear_index_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
@@ -131,6 +162,7 @@ linear_index_t *linear_index_open(const char *Prefix, void *Keys RADB_MEM_PARAMS
 void linear_index_close(linear_index_t *Store) {
 	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
+	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);

@@ -11,7 +11,8 @@ typedef enum {
 	RADB_HEADER_CORRUPTED,
 	RADB_KEYS_FILE_NOT_FOUND,
 	RADB_KEYS_HEADER_MISMATCH,
-	RADB_KEYS_HEADER_CORRUPTED
+	RADB_KEYS_HEADER_CORRUPTED,
+	RADB_FILE_LOCKED
 } radb_error_t;
 
 const char *radb_error_string(radb_error_t Error);
