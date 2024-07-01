@@ -143,6 +143,7 @@ fixed_store_open_t fixed_store_open2(const char *Prefix RADB_MEM_PARAMS) {
 		return (fixed_store_open_t){NULL, RADB_HEADER_MISMATCH};
 	}
 	uint32_t NodeSize = Store->Header->NodeSize;
+	if (!NodeSize) return (fixed_store_open_t){NULL, RADB_HEADER_MISMATCH};
 	size_t ExpectedSize = sizeof(fixed_store_header_t) + Store->Header->NumEntries * NodeSize;
 	if (ExpectedSize != Store->HeaderSize) {
 		// The header was not written after the store size was increased, adjust accordingly.
