@@ -804,6 +804,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 	if (!Remain) {
 		NodeIndex = string_store_node_alloc(Store, NodeSize);
 		Store->Header->Entries[Index].Link = NodeIndex;
+		Store->Header->Entries[Index].Length = 4;
 		void *Node = Store->Data + NodeSize * NodeIndex;
 		*(uint32_t *)Node = Value;
 		return 1;
