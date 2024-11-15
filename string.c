@@ -848,10 +848,14 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 		uint32_t *Limit = Remain <= NodeSize ? (uint32_t *)(Node + Remain) : (uint32_t *)(Node + NodeSize - 4);
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) {
-				if ((Store->Header->Entries[Index].Length -= 4) == 0) {
+				size_t Length = (Store->Header->Entries[Index].Length -= 4);
+				if (Length == 0) {
 					Store->Header->NumFreeNodes += 1;
 					NODE_LINK(Node) = Store->Header->FreeNode;
 					Store->Header->FreeNode = NodeIndex;
+					return 1;
+				} else if (Length == 4) {
+					*Values = *(uint32_t *)(Node + Remain - 4);
 					return 1;
 				}
 				while (Remain > NodeSize) {
