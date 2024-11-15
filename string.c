@@ -769,7 +769,7 @@ int string_store_value_search_uint32(string_store_t *Store, size_t Index, uint32
 			Limit = (uint32_t *)(Node + Remain);
 			NodeIndex = INVALID_INDEX;
 		} else {
-			Remain -= NodeSize;
+			Remain -= (NodeSize - 4);
 			Limit = (uint32_t *)(Node + NodeSize - 4);
 			NodeIndex = NODE_LINK(Node);
 		}
@@ -815,7 +815,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 			Limit = (uint32_t *)(Node + Remain);
 			NodeIndex = INVALID_INDEX;
 		} else {
-			Remain -= NodeSize;
+			Remain -= (NodeSize - 4);
 			Limit = (uint32_t *)(Node + NodeSize - 4);
 			NodeIndex = NODE_LINK(Node);
 		}
@@ -858,7 +858,7 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 			Limit = (uint32_t *)(Node + Remain);
 			NextIndex = INVALID_INDEX;
 		} else {
-			Remain -= NodeSize;
+			Remain -= (NodeSize - 4);
 			Limit = (uint32_t *)(Node + NodeSize - 4);
 			NextIndex = NODE_LINK(Node);
 		}
