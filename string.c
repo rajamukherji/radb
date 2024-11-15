@@ -627,7 +627,6 @@ void string_store_writer_append(string_store_writer_t *Writer, string_store_t *S
 	}
 }
 
-
 static inline size_t string_store_node_alloc(string_store_t *Store, size_t NodeSize) {
 	if (!Store->Header->NumFreeNodes) {
 		size_t NumNodes = Store->Header->ChunkSize;
@@ -756,6 +755,141 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 			}
 		}
 	}
+}
+
+int string_store_value_search_uint32(string_store_t *Store, size_t Index, uint32_t Value) {
+	if (Index >= Store->Header->NumEntries) return 0;
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t NodeIndex = Store->Header->Entries[Index].Link;
+	size_t Remain = Store->Header->Entries[Index].Length;
+	while (NodeIndex != INVALID_INDEX) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
+		uint32_t *Limit;
+		if (Remain <= NodeSize) {
+			Limit = (uint32_t *)(Node + Remain);
+			NodeIndex = INVALID_INDEX;
+		} else {
+			Remain -= NodeSize;
+			Limit = (uint32_t *)(Node + NodeSize - 4);
+			NodeIndex = NODE_LINK(Node);
+		}
+		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
+			if (*Values == Value) return 1;
+		}
+	}
+	return 0;
+}
+
+int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32_t Value) {
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += 512 - 1;
+		NumEntries /= 512;
+		NumEntries *= 512;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = INVALID_INDEX;
+			Entries[I].Length = 0;
+		}
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t NodeIndex = Store->Header->Entries[Index].Link;
+	size_t Remain = Store->Header->Entries[Index].Length;
+	void *Node = NULL;
+	while (NodeIndex != INVALID_INDEX) {
+		Node = Store->Data + NodeSize * NodeIndex;
+		uint32_t *Limit;
+		if (Remain <= NodeSize) {
+			Limit = (uint32_t *)(Node + Remain);
+			NodeIndex = INVALID_INDEX;
+		} else {
+			Remain -= NodeSize;
+			Limit = (uint32_t *)(Node + NodeSize - 4);
+			NodeIndex = NODE_LINK(Node);
+		}
+		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
+			if (*Values == Value) return 0;
+		}
+	}
+	if (Remain == 0) {
+		NodeIndex = string_store_node_alloc(Store, NodeSize);
+		Store->Header->Entries[Index].Link = NodeIndex;
+		Node = Store->Data + NodeSize * NodeIndex;
+		*(uint32_t *)Node = Value;
+	} else if (Remain < NodeSize) {
+		*(uint32_t *)(Node + Remain) = Value;
+	} else {
+		uint32_t Save = NODE_LINK(Node);
+		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
+		Node = Store->Data + NodeSize * NodeIndex;
+		NODE_LINK(Node) = NewIndex;
+		NodeIndex = NewIndex;
+		Node = Store->Data + NodeSize * NodeIndex;
+		*(uint32_t *)Node = Save;
+		*(uint32_t *)(Node + 4) = Value;
+	}
+	Store->Header->Entries[Index].Length += 4;
+	return 1;
+}
+
+int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32_t Value) {
+	if (Index >= Store->Header->NumEntries) return 0;
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t PrevIndex = INVALID_INDEX;
+	size_t NodeIndex = Store->Header->Entries[Index].Link;
+	size_t Remain = Store->Header->Entries[Index].Length;
+	while (NodeIndex != INVALID_INDEX) {
+		size_t NextIndex;
+		void *Node = Store->Data + NodeSize * NodeIndex;
+		uint32_t *Limit;
+		if (Remain <= NodeSize) {
+			Limit = (uint32_t *)(Node + Remain);
+			NextIndex = INVALID_INDEX;
+		} else {
+			Remain -= NodeSize;
+			Limit = (uint32_t *)(Node + NodeSize - 4);
+			NextIndex = NODE_LINK(Node);
+		}
+		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
+			if (*Values == Value) {
+				if ((Store->Header->Entries[Index].Length -= 4) == 0) {
+					Store->Header->NumFreeNodes += 1;
+					NODE_LINK(Node) = Store->Header->FreeNode;
+					Store->Header->FreeNode = NodeIndex;
+					return 1;
+				}
+				while (Remain > NodeSize) {
+					PrevIndex = NodeIndex;
+					Remain -= NodeSize;
+					Node = Store->Data + NodeSize * NodeIndex;
+					NodeIndex = NODE_LINK(Node);
+				}
+				*Values = *(uint32_t *)(Node + Remain - 4);
+				if (Remain == 8) {
+					uint32_t Save = *(uint32_t *)Node;
+					Store->Header->NumFreeNodes += 1;
+					NODE_LINK(Node) = Store->Header->FreeNode;
+					Store->Header->FreeNode = NodeIndex;
+					Node = Store->Data + NodeSize * PrevIndex;
+					NODE_LINK(Node) = Save;
+				}
+				return 1;
+			}
+		}
+		PrevIndex = NodeIndex;
+		NodeIndex = NextIndex;
+	}
+	return 0;
 }
 
 #define STRING_INDEX_SIGNATURE 0x49534152
