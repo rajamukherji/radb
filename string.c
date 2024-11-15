@@ -803,6 +803,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 		Store->HeaderSize = HeaderSize;
 	}
 	size_t NodeSize = Store->Header->NodeSize;
+	size_t PrevIndex = INVALID_INDEX;
 	size_t NodeIndex = Store->Header->Entries[Index].Link;
 	size_t Remain = Store->Header->Entries[Index].Length;
 	void *Node = NULL;
@@ -820,6 +821,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) return 0;
 		}
+		PrevIndex = NodeIndex;
 	}
 	if (Remain == 0) {
 		NodeIndex = string_store_node_alloc(Store, NodeSize);
@@ -831,7 +833,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 	} else {
 		uint32_t Save = NODE_LINK(Node);
 		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
-		Node = Store->Data + NodeSize * NodeIndex;
+		Node = Store->Data + NodeSize * PrevIndex;
 		NODE_LINK(Node) = NewIndex;
 		NodeIndex = NewIndex;
 		Node = Store->Data + NodeSize * NodeIndex;
