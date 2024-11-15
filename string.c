@@ -872,7 +872,7 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 				}
 				while (Remain > NodeSize) {
 					PrevIndex = NodeIndex;
-					Remain -= NodeSize;
+					Remain -= (NodeSize - 4);
 					Node = Store->Data + NodeSize * NodeIndex;
 					NodeIndex = NODE_LINK(Node);
 				}
