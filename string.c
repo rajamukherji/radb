@@ -762,20 +762,16 @@ int string_store_value_search_uint32(string_store_t *Store, size_t Index, uint32
 	size_t NodeSize = Store->Header->NodeSize;
 	size_t NodeIndex = Store->Header->Entries[Index].Link;
 	size_t Remain = Store->Header->Entries[Index].Length;
-	while (NodeIndex != INVALID_INDEX) {
+	if (!Remain) return 0;
+	for (;;) {
 		void *Node = Store->Data + NodeSize * NodeIndex;
-		uint32_t *Limit;
-		if (Remain <= NodeSize) {
-			Limit = (uint32_t *)(Node + Remain);
-			NodeIndex = INVALID_INDEX;
-		} else {
-			Remain -= (NodeSize - 4);
-			Limit = (uint32_t *)(Node + NodeSize - 4);
-			NodeIndex = NODE_LINK(Node);
-		}
+		uint32_t *Limit = Remain <= NodeSize ? (uint32_t *)(Node + Remain) : (uint32_t *)(Node + NodeSize - 4);
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) return 1;
 		}
+		if (Remain <= NodeSize) break;
+		Remain -= (NodeSize - 4);
+		NodeIndex = NODE_LINK(Node);
 	}
 	return 0;
 }
@@ -803,40 +799,35 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 		Store->HeaderSize = HeaderSize;
 	}
 	size_t NodeSize = Store->Header->NodeSize;
-	size_t PrevIndex = INVALID_INDEX;
 	size_t NodeIndex = Store->Header->Entries[Index].Link;
 	size_t Remain = Store->Header->Entries[Index].Length;
-	void *Node = NULL;
-	while (NodeIndex != INVALID_INDEX) {
-		PrevIndex = NodeIndex;
-		Node = Store->Data + NodeSize * NodeIndex;
-		uint32_t *Limit;
-		if (Remain <= NodeSize) {
-			Limit = (uint32_t *)(Node + Remain);
-			NodeIndex = INVALID_INDEX;
-		} else {
-			Remain -= (NodeSize - 4);
-			Limit = (uint32_t *)(Node + NodeSize - 4);
-			NodeIndex = NODE_LINK(Node);
-		}
+	if (!Remain) {
+		NodeIndex = string_store_node_alloc(Store, NodeSize);
+		Store->Header->Entries[Index].Link = NodeIndex;
+		void *Node = Store->Data + NodeSize * NodeIndex;
+		*(uint32_t *)Node = Value;
+		return 1;
+	}
+	for (;;) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
+		uint32_t *Limit = Remain <= NodeSize ? (uint32_t *)(Node + Remain) : (uint32_t *)(Node + NodeSize - 4);
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) return 0;
 		}
+		if (Remain <= NodeSize) break;
+		Remain -= (NodeSize - 4);
+		NodeIndex = NODE_LINK(Node);
 	}
-	if (Remain == 0) {
-		NodeIndex = string_store_node_alloc(Store, NodeSize);
-		Store->Header->Entries[Index].Link = NodeIndex;
-		Node = Store->Data + NodeSize * NodeIndex;
-		*(uint32_t *)Node = Value;
-	} else if (Remain < NodeSize) {
+	if (Remain < NodeSize) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
 		*(uint32_t *)(Node + Remain) = Value;
 	} else {
+		void *Node = Store->Data + NodeSize * NodeIndex;
 		uint32_t Save = NODE_LINK(Node);
 		size_t NewIndex = string_store_node_alloc(Store, NodeSize);
-		Node = Store->Data + NodeSize * PrevIndex;
-		NODE_LINK(Node) = NewIndex;
-		NodeIndex = NewIndex;
 		Node = Store->Data + NodeSize * NodeIndex;
+		NODE_LINK(Node) = NewIndex;
+		Node = Store->Data + NodeSize * NewIndex;
 		*(uint32_t *)Node = Save;
 		*(uint32_t *)(Node + 4) = Value;
 	}
@@ -850,18 +841,10 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 	size_t PrevIndex = INVALID_INDEX;
 	size_t NodeIndex = Store->Header->Entries[Index].Link;
 	size_t Remain = Store->Header->Entries[Index].Length;
-	while (NodeIndex != INVALID_INDEX) {
-		size_t NextIndex;
+	if (!Remain) return 0;
+	for (;;) {
 		void *Node = Store->Data + NodeSize * NodeIndex;
-		uint32_t *Limit;
-		if (Remain <= NodeSize) {
-			Limit = (uint32_t *)(Node + Remain);
-			NextIndex = INVALID_INDEX;
-		} else {
-			Remain -= (NodeSize - 4);
-			Limit = (uint32_t *)(Node + NodeSize - 4);
-			NextIndex = NODE_LINK(Node);
-		}
+		uint32_t *Limit = Remain <= NodeSize ? (uint32_t *)(Node + Remain) : (uint32_t *)(Node + NodeSize - 4);
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) {
 				if ((Store->Header->Entries[Index].Length -= 4) == 0) {
@@ -871,8 +854,8 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 					return 1;
 				}
 				while (Remain > NodeSize) {
-					PrevIndex = NodeIndex;
 					Remain -= (NodeSize - 4);
+					PrevIndex = NodeIndex;
 					NodeIndex = NODE_LINK(Node);
 					Node = Store->Data + NodeSize * NodeIndex;
 				}
@@ -888,8 +871,10 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 				return 1;
 			}
 		}
+		if (Remain <= NodeSize) break;
+		Remain -= (NodeSize - 4);
 		PrevIndex = NodeIndex;
-		NodeIndex = NextIndex;
+		NodeIndex = NODE_LINK(Node);
 	}
 	return 0;
 }
