@@ -873,8 +873,8 @@ int string_store_value_remove_uint32(string_store_t *Store, size_t Index, uint32
 				while (Remain > NodeSize) {
 					PrevIndex = NodeIndex;
 					Remain -= (NodeSize - 4);
-					Node = Store->Data + NodeSize * NodeIndex;
 					NodeIndex = NODE_LINK(Node);
+					Node = Store->Data + NodeSize * NodeIndex;
 				}
 				*Values = *(uint32_t *)(Node + Remain - 4);
 				if (Remain == 8) {
