@@ -808,6 +808,7 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 	size_t Remain = Store->Header->Entries[Index].Length;
 	void *Node = NULL;
 	while (NodeIndex != INVALID_INDEX) {
+		PrevIndex = NodeIndex;
 		Node = Store->Data + NodeSize * NodeIndex;
 		uint32_t *Limit;
 		if (Remain <= NodeSize) {
@@ -821,7 +822,6 @@ int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32
 		for (uint32_t *Values = (uint32_t *)Node; Values < Limit; ++Values) {
 			if (*Values == Value) return 0;
 		}
-		PrevIndex = NodeIndex;
 	}
 	if (Remain == 0) {
 		NodeIndex = string_store_node_alloc(Store, NodeSize);
