@@ -599,11 +599,10 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 		}
 
 		munmap(Store->Header, Store->HeaderSize);
-		close(Store->HeaderFd);
-
 		char FileName[strlen(Store->Prefix) + 10];
 		sprintf(FileName, "%s.index", Store->Prefix);
 		rename(FileName2, FileName);
+		close(Store->HeaderFd);
 
 		Store->HeaderSize = HeaderSize;
 		Store->Header = Header;
