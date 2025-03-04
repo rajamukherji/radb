@@ -59,17 +59,6 @@ static int lock_file(int Fd) {
 	}
 }
 
-static int unlock_file(int Fd) {
-	struct flock Lock = {0,};
-	Lock.l_type = F_UNLCK;
-	if (fcntl(Fd, F_SETLK, &Lock) < 0) {
-		fprintf(stderr, "Error unlocking file: %s", strerror(errno));
-		return -1;
-	} else {
-		return 0;
-	}
-}
-
 fixed_store_t *fixed_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS) {
 #if defined(RADB_MEM_MALLOC)
 	fixed_store_t *Store = malloc(sizeof(fixed_store_t));
@@ -177,7 +166,6 @@ fixed_store_t *fixed_store_open(const char *Prefix RADB_MEM_PARAMS) {
 void fixed_store_close(fixed_store_t *Store) {
 	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
-	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);
@@ -413,7 +401,10 @@ fixed_index_open_t fixed_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		return (fixed_index_open_t){NULL, RADB_FILE_LOCKED};
 	}
 	fixed_store_open_t KeysOpen = fixed_store_open2(Prefix RADB_MEM_ARGS);
-	if (!KeysOpen.Store) return (fixed_index_open_t){NULL, KeysOpen.Error + 3};
+	if (!KeysOpen.Store) {
+		close(HeaderFd);
+		return (fixed_index_open_t){NULL, KeysOpen.Error + 3};
+	}
 #if defined(RADB_MEM_MALLOC)
 	fixed_index_t *Store = malloc(sizeof(fixed_index_t));
 	Store->Prefix = strdup(Prefix);
@@ -429,12 +420,10 @@ fixed_index_open_t fixed_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 	Store->free = free;
 #endif
 	Store->HeaderFd = HeaderFd;
-	lock_file(Store->HeaderFd);
 	Store->HeaderSize = Stat->st_size;
 	Store->Header = mmap(NULL, Store->HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
 	if (Store->Header->Signature != FIXED_INDEX_SIGNATURE) {
 		munmap(Store->Header, Store->HeaderSize);
-		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 		fixed_store_close(KeysOpen.Store);
 		return (fixed_index_open_t){NULL, RADB_HEADER_MISMATCH};
@@ -451,7 +440,6 @@ void fixed_index_close(fixed_index_t *Store) {
 	fixed_store_close(Store->Keys);
 	msync(Store->Header, Store->HeaderSize, MS_SYNC);
 	munmap(Store->Header, Store->HeaderSize);
-	unlock_file(Store->HeaderFd);
 	close(Store->HeaderFd);
 #if defined(RADB_MEM_MALLOC)
 	free((void *)Store->Prefix);
@@ -611,7 +599,6 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 		}
 
 		munmap(Store->Header, Store->HeaderSize);
-		unlock_file(Store->HeaderFd);
 		close(Store->HeaderFd);
 
 		char FileName[strlen(Store->Prefix) + 10];
