@@ -513,10 +513,10 @@ static int compare_hashes(const void *_A, const void *_B, void *C) {
 	const hash_t *A = (const hash_t *)_A;
 	const hash_t *B = (const hash_t *)_B;
 	fixed_index_t *Store = (fixed_index_t *)C;
-	if (B->Link >= DELETED_INDEX) return 1;
-	if (A->Link >= DELETED_INDEX) return -1;
-	if (A->Hash < B->Hash) return 1;
+	if (B->Link >= DELETED_INDEX) return -1;
+	if (A->Link >= DELETED_INDEX) return 1;
 	if (A->Hash > B->Hash) return -1;
+	if (A->Hash < B->Hash) return 1;
 	const void *AKey = fixed_store_get_unchecked(Store->Keys, A->Link);
 	const void *BKey = fixed_store_get_unchecked(Store->Keys, B->Link);
 	return memcmp(BKey, AKey, Store->Header->KeySize);

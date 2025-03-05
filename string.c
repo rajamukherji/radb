@@ -1088,10 +1088,10 @@ static int compare_hashes(const void *_A, const void *_B, void *C) {
 	const hash_t *A = (const hash_t *)_A;
 	const hash_t *B = (const hash_t *)_B;
 	string_index_t *Store = (string_index_t *)C;
-	if (B->Link >= DELETED_INDEX) return 1;
-	if (A->Link >= DELETED_INDEX) return -1;
-	if (A->Hash < B->Hash) return 1;
+	if (B->Link >= DELETED_INDEX) return -1;
+	if (A->Link >= DELETED_INDEX) return 1;
 	if (A->Hash > B->Hash) return -1;
+	if (A->Hash < B->Hash) return 1;
 	return string_store_compare2_unchecked(Store->Keys, B->Link, A->Link);
 }
 
