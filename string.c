@@ -990,8 +990,8 @@ string_index_open_t string_index_open2(const char *Prefix RADB_MEM_PARAMS) {
 		Header->Deleted = 0;
 		memcpy(Header->Hashes, HeaderV0->Hashes, HashSize * sizeof(hash_t));
 		munmap(Store->Header, Store->HeaderSize);
-		close(Store->HeaderFd);
 		rename(FileName2, FileName);
+		close(Store->HeaderFd);
 		Store->HeaderSize = HeaderSize;
 		Store->Header = Header;
 		Store->HeaderFd = HeaderFd;
