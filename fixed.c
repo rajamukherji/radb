@@ -470,7 +470,7 @@ const void *fixed_index_get(fixed_index_t *Store, size_t Index) {
 	return fixed_store_get(Store->Keys, Index);
 }
 
-static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
+/*static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	hash_t *A = First;
 	hash_t *B = Last;
 	hash_t T = *A;
@@ -507,6 +507,19 @@ static void sort_hashes(fixed_index_t *Store, hash_t *First, hash_t *Last) {
 	*A = P;
 	if (First < A - 1) sort_hashes(Store, First, A - 1);
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
+}*/
+
+static int compare_hashes(const void *_A, const void *_B, void *C) {
+	const hash_t *A = (const hash_t *)_A;
+	const hash_t *B = (const hash_t *)_B;
+	fixed_index_t *Store = (fixed_index_t *)C;
+	if (B->Link >= DELETED_INDEX) return 1;
+	if (A->Link >= DELETED_INDEX) return -1;
+	if (A->Hash < B->Hash) return 1;
+	if (A->Hash > B->Hash) return -1;
+	const void *AKey = fixed_store_get_unchecked(Store->Keys, A->Link);
+	const void *BKey = fixed_store_get_unchecked(Store->Keys, B->Link);
+	return memcmp(BKey, AKey, Store->Header->KeySize);
 }
 
 index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
@@ -586,7 +599,8 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 		Header->KeySize = Store->Header->KeySize;
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
-		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
+		//sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
+		qsort_r(Hashes, Store->Header->Size, sizeof(hash_t), compare_hashes, Store);
 		for (hash_t *Old = Hashes; Old->Link < DELETED_INDEX; ++Old) {
 			unsigned long NewHash = Old->Hash;
 			unsigned int NewIncr = ((NewHash >> 8) | 1) & Mask;
