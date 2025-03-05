@@ -575,7 +575,7 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 
 		size_t HeaderSize = sizeof(fixed_index_header_t) + HashSize * sizeof(hash_t);
 		int HeaderFd = open(FileName2, O_RDWR | O_CREAT | O_TRUNC, 0777);
-		lock_file(Store->HeaderFd);
+		lock_file(HeaderFd);
 		ftruncate(HeaderFd, HeaderSize);
 		fixed_index_header_t *Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Header->Signature = FIXED_INDEX_SIGNATURE;
