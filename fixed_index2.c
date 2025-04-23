@@ -178,5 +178,19 @@ const void *fixed_index2_get(fixed_index2_t *Store, size_t Index) {
 }
 
 size_t fixed_index2_delete(fixed_index2_t *Store, const void *Value) {
-	return INVALID_INDEX;
+	size_t Index = INVALID_INDEX;
+	size_t Length = linear_index_get_extra(Store);
+	uint32_t Hash = fixed_hash(Value, Length);
+	fixed_key_t Full = {Value, Length};
+	if (Length == sizeof(linear_key_t)) {
+		Index = linear_index_delete(Store, Hash, Value, Value);
+	} else if (Length > sizeof(linear_key_t)) {
+		Index = linear_index_delete(Store, Hash, Value, &Full);
+	} else {
+		linear_key_t Key = {0,};
+		memcpy(Key, Value, Length);
+		Index = linear_index_delete(Store, Hash, Key, &Full);
+	}
+	if (Index != INVALID_INDEX) fixed_store_free(linear_index_keys(Store), Index);
+	return Index;
 }
