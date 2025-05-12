@@ -155,5 +155,17 @@ size_t string_index2_get(string_index2_t *Store, size_t Index, void *Buffer, siz
 }
 
 size_t string_index2_delete(string_index2_t *Store, const char *String, size_t Length) {
-	return INVALID_INDEX;
+	if (!Length) Length = strlen(String);
+	uint32_t Hash = string_hash(String, Length);
+	string_key_t Full = {String, Length};
+	linear_key_t Key = {0,};
+	if (Length >= sizeof(linear_key_t)) {
+		memcpy(Key, String, sizeof(linear_key_t) - 1);
+		Key[sizeof(linear_key_t) - 1] = 1;
+	} else {
+		memcpy(Key, String, Length);
+	}
+	size_t Index = linear_index_delete(Store, Hash, Key, &Full);
+	if (Index != INVALID_INDEX) string_store_free(linear_index_keys(Store), Index);
+	return Index;
 }

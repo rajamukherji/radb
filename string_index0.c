@@ -128,5 +128,10 @@ size_t string_index0_get(string_index0_t *Store, size_t Index, void *Buffer, siz
 }
 
 size_t string_index0_delete(string_index0_t *Store, const char *String, size_t Length) {
-	return INVALID_INDEX;
+	if (!Length) Length = strlen(String);
+	uint32_t Hash = string_hash(String, Length);
+	string_key_t Full = {String, Length};
+	size_t Index = linear_index0_delete(Store, Hash, &Full);
+	if (Index != INVALID_INDEX) string_store_free(linear_index0_keys(Store), Index);
+	return Index;
 }
