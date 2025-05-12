@@ -53,12 +53,12 @@ static int migrate(size_t Index, migration_t *Migration) {
 	return 0;
 }
 
-linear_index0_open_t string_index0_open2(const char *Prefix RADB_MEM_PARAMS) {
-	string_store_open_t KeysOpen = string_store_open2(Prefix RADB_MEM_ARGS);
+linear_index0_open_t string_index0_open2(const char *Prefix, int Readonly RADB_MEM_PARAMS) {
+	string_store_open_t KeysOpen = string_store_open2(Prefix, Readonly RADB_MEM_ARGS);
 	if (!KeysOpen.Store) return (linear_index0_open_t){NULL, KeysOpen.Error + 3};
-	linear_index0_open_t IndexOpen = linear_index0_open2(Prefix, KeysOpen.Store RADB_MEM_ARGS);
+	linear_index0_open_t IndexOpen = linear_index0_open2(Prefix, KeysOpen.Store, Readonly RADB_MEM_ARGS);
 	if (IndexOpen.Error == RADB_FILE_NOT_FOUND) {
-		string_index_open_t OldOpen = string_index_open2(Prefix RADB_MEM_ARGS);
+		string_index_open_t OldOpen = string_index_open2(Prefix, Readonly RADB_MEM_ARGS);
 		if (OldOpen.Error != RADB_SUCCESS) {
 			string_store_close(KeysOpen.Store);
 			return IndexOpen;
@@ -78,8 +78,8 @@ linear_index0_open_t string_index0_open2(const char *Prefix RADB_MEM_PARAMS) {
 	return IndexOpen;
 }
 
-string_index0_t *string_index0_open(const char *Prefix RADB_MEM_PARAMS) {
-	return string_index0_open2(Prefix RADB_MEM_ARGS).Index;
+string_index0_t *string_index0_open(const char *Prefix, int Readonly RADB_MEM_PARAMS) {
+	return string_index0_open2(Prefix, Readonly RADB_MEM_ARGS).Index;
 }
 
 size_t string_index0_count(string_index0_t *Store) {

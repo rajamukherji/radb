@@ -4,14 +4,12 @@
 #include "config.h"
 #include "common.h"
 
-#define INVALID_INDEX 0xFFFFFFFF
-
 typedef struct string_store_t string_store_t;
 typedef struct string_store_writer_t string_store_writer_t;
 typedef struct string_store_reader_t string_store_reader_t;
 
 string_store_t *string_store_create(const char *Prefix, size_t RequestedSize, size_t ChunkSize RADB_MEM_PARAMS);
-string_store_t *string_store_open(const char *Prefix RADB_MEM_PARAMS);
+string_store_t *string_store_open(const char *Prefix, int Readonly RADB_MEM_PARAMS);
 void string_store_close(string_store_t *Store);
 
 typedef struct {
@@ -19,7 +17,7 @@ typedef struct {
 	radb_error_t Error;
 } string_store_open_t;
 
-string_store_open_t string_store_open2(const char *Prefix RADB_MEM_PARAMS);
+string_store_open_t string_store_open2(const char *Prefix, int Readonly RADB_MEM_PARAMS);
 
 size_t string_store_num_entries(string_store_t *Store);
 

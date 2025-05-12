@@ -4,13 +4,11 @@
 #include "config.h"
 #include "common.h"
 
-#define INVALID_INDEX 0xFFFFFFFF
-
 typedef struct linear_index_t linear_index_t;
 typedef int (*linear_compare_t)(void *Keys, const void *Full, uint32_t Index);
 typedef size_t (*linear_insert_t)(void *Keys, const void *Full);
 
-linear_index_t *linear_index_open(const char *Prefix, void *Keys RADB_MEM_PARAMS);
+linear_index_t *linear_index_open(const char *Prefix, void *Keys, int Readonly RADB_MEM_PARAMS);
 linear_index_t *linear_index_create(const char *Prefix, void *Keys RADB_MEM_PARAMS);
 void linear_index_set_compare(linear_index_t *Store, linear_compare_t Compare);
 void linear_index_set_insert(linear_index_t *Store, linear_insert_t Insert);
@@ -30,7 +28,7 @@ typedef struct {
 #define LINEAR_KEY_SIZE 16
 typedef uint8_t linear_key_t[LINEAR_KEY_SIZE];
 
-linear_index_open_t linear_index_open2(const char *Prefix, void *Keys RADB_MEM_PARAMS);
+linear_index_open_t linear_index_open2(const char *Prefix, void *Keys, int Readonly RADB_MEM_PARAMS);
 
 size_t linear_index_search(linear_index_t *Store, uint32_t Hash, const linear_key_t Key, const void *Full);
 size_t linear_index_insert(linear_index_t *Store, uint32_t Hash, const linear_key_t Key, const void *Full);

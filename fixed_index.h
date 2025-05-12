@@ -4,13 +4,10 @@
 #include "config.h"
 #include "common.h"
 
-#define INVALID_INDEX 0xFFFFFFFF
-#define DELETED_INDEX 0xFFFFFFFE
-
 typedef struct fixed_index_t fixed_index_t;
 
 fixed_index_t *fixed_index_create(const char *Prefix, size_t KeySize, size_t ChunkSize RADB_MEM_PARAMS);
-fixed_index_t *fixed_index_open(const char *Prefix RADB_MEM_PARAMS);
+fixed_index_t *fixed_index_open(const char *Prefix, int Readonly RADB_MEM_PARAMS);
 size_t fixed_index_num_entries(fixed_index_t *Store);
 #define fixed_index_count fixed_index_num_entries
 size_t fixed_index_num_deleted(fixed_index_t *Store);
@@ -21,7 +18,7 @@ typedef struct {
 	radb_error_t Error;
 } fixed_index_open_t;
 
-fixed_index_open_t fixed_index_open2(const char *Prefix RADB_MEM_PARAMS);
+fixed_index_open_t fixed_index_open2(const char *Prefix, int Readonly RADB_MEM_PARAMS);
 
 size_t fixed_index_insert(fixed_index_t *Store, const char *Key);
 size_t fixed_index_search(fixed_index_t *Store, const char *Key);

@@ -105,7 +105,7 @@ linear_index0_t *linear_index0_create(const char *Prefix, void *Keys RADB_MEM_PA
 	return Store;
 }
 
-linear_index0_open_t linear_index0_open2(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
+linear_index0_open_t linear_index0_open2(const char *Prefix, void *Keys, int Readonly RADB_MEM_PARAMS) {
 	struct stat Stat[1];
 	char FileName[strlen(Prefix) + 10];
 	sprintf(FileName, "%s.index2", Prefix);
@@ -137,8 +137,8 @@ linear_index0_open_t linear_index0_open2(const char *Prefix, void *Keys RADB_MEM
 	return (linear_index0_open_t){Store, RADB_SUCCESS};
 }
 
-linear_index0_t *linear_index0_open(const char *Prefix, void *Keys RADB_MEM_PARAMS) {
-	return linear_index0_open2(Prefix, Keys RADB_MEM_ARGS).Index;
+linear_index0_t *linear_index0_open(const char *Prefix, void *Keys, int Readonly RADB_MEM_PARAMS) {
+	return linear_index0_open2(Prefix, Keys, Readonly RADB_MEM_ARGS).Index;
 }
 
 void linear_index0_close(linear_index0_t *Store) {

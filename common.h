@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define INVALID_INDEX 0xFFFFFFFF
+#define DELETED_INDEX 0xFFFFFFFE
+
 typedef enum {
 	RADB_SUCCESS,
 	RADB_FILE_NOT_FOUND,
