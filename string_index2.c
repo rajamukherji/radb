@@ -61,7 +61,7 @@ static int migrate(size_t Index, migration_t *Migration) {
 
 linear_index_open_t string_index2_open2(const char *Prefix, int Readonly RADB_MEM_PARAMS) {
 	string_store_open_t KeysOpen = string_store_open2(Prefix, Readonly RADB_MEM_ARGS);
-	if (!KeysOpen.Store) return (linear_index_open_t){NULL, KeysOpen.Error + 3};
+	if (!KeysOpen.Store) return (linear_index_open_t){NULL, KeysOpen.Error};
 	linear_index_open_t IndexOpen = linear_index_open2(Prefix, KeysOpen.Store, Readonly RADB_MEM_ARGS);
 	if (IndexOpen.Error == RADB_FILE_NOT_FOUND) {
 		string_index_open_t OldOpen = string_index_open2(Prefix, Readonly RADB_MEM_ARGS);

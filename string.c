@@ -1000,7 +1000,7 @@ static string_index_open_t string_index_open2_rw(const char *Prefix RADB_MEM_PAR
 	string_store_open_t KeysOpen = string_store_open2(Prefix, 0 RADB_MEM_ARGS);
 	if (!KeysOpen.Store) {
 		close(HeaderFd);
-		return (string_index_open_t){NULL, KeysOpen.Error + 3};
+		return (string_index_open_t){NULL, KeysOpen.Error};
 	}
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
@@ -1064,7 +1064,7 @@ static string_index_open_t string_index_open2_ro(const char *Prefix RADB_MEM_PAR
 	string_store_open_t KeysOpen = string_store_open2(Prefix, 1 RADB_MEM_ARGS);
 	if (!KeysOpen.Store) {
 		close(HeaderFd);
-		return (string_index_open_t){NULL, KeysOpen.Error + 3};
+		return (string_index_open_t){NULL, KeysOpen.Error};
 	}
 #if defined(RADB_MEM_MALLOC)
 	string_index_t *Store = malloc(sizeof(string_index_t));
