@@ -689,6 +689,7 @@ void string_store_writer_truncate(string_store_writer_t *Writer, string_store_t 
 		size_t NodeSize = Store->Header->NodeSize;
 		size_t Offset = Store->Header->Entries[Index].Length;
 		if (Length < Offset) {
+			Store->Header->Entries[Index].Length = Length;
 			while (Length > NodeSize) {
 				void *Node = Store->Data + NodeSize * NodeIndex;
 				NodeIndex = NODE_LINK(Node);
@@ -712,7 +713,6 @@ void string_store_writer_truncate(string_store_writer_t *Writer, string_store_t 
 			}
 			Writer->Node = NodeIndex;
 			Writer->Remain = NodeSize - Length;
-			Store->Header->Entries[Index].Length = Length;
 		} else {
 			while (Offset > NodeSize) {
 				void *Node = Store->Data + NodeSize * NodeIndex;
