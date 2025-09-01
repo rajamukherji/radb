@@ -40,6 +40,7 @@ struct string_store_writer_t {
 
 void string_store_writer_open(string_store_writer_t *Writer, string_store_t *Store, size_t Index);
 void string_store_writer_append(string_store_writer_t *Writer, string_store_t *Store, size_t Index);
+void string_store_writer_truncate(string_store_writer_t *Writer, string_store_t *Store, size_t Index, size_t Length);
 size_t string_store_writer_write(string_store_writer_t *Writer, const void *Buffer, size_t Length);
 
 struct string_store_reader_t {
@@ -49,6 +50,7 @@ struct string_store_reader_t {
 
 void string_store_reader_open(string_store_reader_t *Reader, string_store_t *Store, size_t Index);
 size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, size_t Length);
+size_t string_store_reader_seek(string_store_reader_t *Reader, size_t Length);
 
 int string_store_value_search_uint32(string_store_t *Store, size_t Index, uint32_t Value);
 int string_store_value_insert_uint32(string_store_t *Store, size_t Index, uint32_t Value);

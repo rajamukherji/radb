@@ -660,6 +660,71 @@ void string_store_writer_append(string_store_writer_t *Writer, string_store_t *S
 	}
 }
 
+void string_store_writer_truncate(string_store_writer_t *Writer, string_store_t *Store, size_t Index, size_t Length) {
+	if (Index >= Store->Header->NumEntries) {
+		size_t NumEntries = (Index + 1) - Store->Header->NumEntries;
+		NumEntries += 512 - 1;
+		NumEntries /= 512;
+		NumEntries *= 512;
+		size_t HeaderSize = Store->HeaderSize + NumEntries * sizeof(entry_t);
+		ftruncate(Store->HeaderFd, HeaderSize);
+#ifdef Linux
+		Store->Header = mremap(Store->Header, Store->HeaderSize, HeaderSize, MREMAP_MAYMOVE);
+#else
+		munmap(Store->Header, Store->HeaderSize);
+		Store->Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, Store->HeaderFd, 0);
+#endif
+		entry_t *Entries = Store->Header->Entries;
+		for (int I = Store->Header->NumEntries; I < Store->Header->NumEntries + NumEntries; ++I) {
+			Entries[I].Link = INVALID_INDEX;
+			Entries[I].Length = 0;
+		}
+		Store->Header->NumEntries += NumEntries;
+		Store->HeaderSize = HeaderSize;
+	}
+	Writer->Store = Store;
+	Writer->Index = Index;
+	size_t NodeIndex = Store->Header->Entries[Index].Link;
+	if (NodeIndex != INVALID_INDEX) {
+		size_t NodeSize = Store->Header->NodeSize;
+		size_t Offset = Store->Header->Entries[Index].Length;
+		if (Length < Offset) {
+			while (Length > NodeSize) {
+				void *Node = Store->Data + NodeSize * NodeIndex;
+				NodeIndex = NODE_LINK(Node);
+				Offset -= (NodeSize - 4);
+				Length -= (NodeSize - 4);
+			}
+			if (Offset > NodeSize) {
+				size_t FreeStart = Store->Header->Entries[NodeIndex].Link;
+				void *FreeEnd = Store->Data + FreeStart * NodeSize;
+				uint32_t FreeNodes = 1;
+				Offset -= (NodeSize - 4);
+				while (Offset > NodeSize) {
+					FreeNodes += 1;
+					FreeEnd = Store->Data + NodeSize * NODE_LINK(FreeEnd);
+					Offset -= (NodeSize - 4);
+				}
+				NODE_LINK(FreeEnd) = Store->Header->FreeNode;
+				Store->Header->NumFreeNodes += FreeNodes;
+				Store->Header->FreeNode = FreeStart;
+			}
+			Writer->Node = NodeIndex;
+			Writer->Remain = NodeSize - Length;
+		} else {
+			while (Offset > NodeSize) {
+				void *Node = Store->Data + NodeSize * NodeIndex;
+				NodeIndex = NODE_LINK(Node);
+				Offset -= (NodeSize - 4);
+			}
+			Writer->Node = NodeIndex;
+			Writer->Remain = NodeSize - Offset;
+		}
+	} else {
+		Writer->Node = INVALID_INDEX;
+	}
+}
+
 static inline size_t string_store_node_alloc(string_store_t *Store, size_t NodeSize) {
 	if (!Store->Header->NumFreeNodes) {
 		size_t NumNodes = Store->Header->ChunkSize;
@@ -784,6 +849,45 @@ size_t string_store_reader_read(string_store_reader_t *Reader, void *Buffer, siz
 				Remain -= Available;
 				Copied += Available;
 				Buffer += Available;
+				Length -= Available;
+			}
+		}
+	}
+}
+
+size_t string_store_reader_seek(string_store_reader_t *Reader, size_t Length) {
+	string_store_t *Store = Reader->Store;
+	size_t NodeSize = Store->Header->NodeSize;
+	size_t NodeIndex = Reader->Node;
+	if (NodeIndex == INVALID_INDEX) return 0;
+	size_t Offset = Reader->Offset;
+	size_t Remain = Reader->Remain;
+	size_t Copied = 0;
+	while (Length > 0) {
+		void *Node = Store->Data + NodeSize * NodeIndex;
+		if (Offset + Remain <= NodeSize) {
+			// Last node
+			if (Length <= Remain) {
+				Reader->Node = NodeIndex;
+				Reader->Offset = Offset + Length;
+				Reader->Remain = Remain - Length;
+				return Copied + Length;
+			} else {
+				Reader->Node = INVALID_INDEX;
+				return Copied + Remain;
+			}
+		} else {
+			size_t Available = NodeSize - Offset - 4;
+			if (Length <= Available) {
+				Reader->Node = NodeIndex;
+				Reader->Offset = Offset + Length;
+				Reader->Remain = Remain - Length;
+				return Copied + Length;
+			} else {
+				NodeIndex = NODE_LINK(Node);
+				Offset = 0;
+				Remain -= Available;
+				Copied += Available;
 				Length -= Available;
 			}
 		}
