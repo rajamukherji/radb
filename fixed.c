@@ -728,13 +728,19 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 			}
 			Header->Hashes[NewIndex] = Old[0];
 		}
+		msync(Header, HeaderSize, MS_SYNC);
+		munmap(Header, HeaderSize);
+		close(HeaderFd);
 
 		munmap(Store->Header, Store->HeaderSize);
+		close(Store->HeaderFd);
+
 		char FileName[strlen(Store->Prefix) + 10];
 		sprintf(FileName, "%s.index", Store->Prefix);
 		rename(FileName2, FileName);
-		close(Store->HeaderFd);
 
+		HeaderFd = open(FileName, O_RDWR, 0777);
+		Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Store->HeaderSize = HeaderSize;
 		Store->Header = Header;
 		Store->HeaderFd = HeaderFd;
