@@ -894,6 +894,7 @@ size_t string_store_reader_seek(string_store_reader_t *Reader, size_t Length) {
 			}
 		}
 	}
+	return 0;
 }
 
 int string_store_value_search_uint32(string_store_t *Store, size_t Index, uint32_t Value) {
@@ -1386,13 +1387,19 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 			}
 			Header->Hashes[NewIndex] = Old[0];
 		}
+		msync(Header, HeaderSize, MS_SYNC);
+		munmap(Header, HeaderSize);
+		close(HeaderFd);
 
 		munmap(Store->Header, Store->HeaderSize);
+		close(Store->HeaderFd);
+
 		char FileName[strlen(Store->Prefix) + 10];
 		sprintf(FileName, "%s.index", Store->Prefix);
 		rename(FileName2, FileName);
-		close(Store->HeaderFd);
 
+		HeaderFd = open(FileName, O_RDWR, 0777);
+		Header = mmap(NULL, HeaderSize, PROT_READ | PROT_WRITE, MAP_SHARED, HeaderFd, 0);
 		Store->HeaderSize = HeaderSize;
 		Store->Header = Header;
 		Store->HeaderFd = HeaderFd;
