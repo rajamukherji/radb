@@ -1290,6 +1290,21 @@ size_t string_index_get(string_index_t *Store, size_t Index, void *Buffer, size_
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }*/
 
+#ifdef Mingw
+
+static int compare_hashes(void *C, const void *_A, const void *_B) {
+	const hash_t *A = (const hash_t *)_A;
+	const hash_t *B = (const hash_t *)_B;
+	string_index_t *Store = (string_index_t *)C;
+	if (B->Link >= DELETED_INDEX) return -1;
+	if (A->Link >= DELETED_INDEX) return 1;
+	if (A->Hash > B->Hash) return -1;
+	if (A->Hash < B->Hash) return 1;
+	return string_store_compare2_unchecked(Store->Keys, B->Link, A->Link);
+}
+
+#else
+
 static int compare_hashes(const void *_A, const void *_B, void *C) {
 	const hash_t *A = (const hash_t *)_A;
 	const hash_t *B = (const hash_t *)_B;
@@ -1300,6 +1315,8 @@ static int compare_hashes(const void *_A, const void *_B, void *C) {
 	if (A->Hash < B->Hash) return 1;
 	return string_store_compare2_unchecked(Store->Keys, B->Link, A->Link);
 }
+
+#endif
 
 index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
@@ -1375,7 +1392,11 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
 		//sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
+#ifdef Mingw
+		qsort_s(Hashes, Store->Header->Size, sizeof(hash_t), compare_hashes, Store);
+#else
 		qsort_r(Hashes, Store->Header->Size, sizeof(hash_t), compare_hashes, Store);
+#endif
 		for (hash_t *Old = Hashes; Old->Link < DELETED_INDEX; ++Old) {
 			unsigned long NewHash = Old->Hash;
 			unsigned int NewIncr = ((NewHash >> 8) | 1) & Mask;

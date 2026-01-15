@@ -626,7 +626,7 @@ const void *fixed_index_get(fixed_index_t *Store, size_t Index) {
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
 }*/
 
-#if defined(Mingw) || defined(Android)
+#ifdef Mingw
 
 static int compare_hashes(void *C, const void *_A, const void *_B) {
 	const hash_t *A = (const hash_t *)_A;
@@ -735,7 +735,7 @@ index_result_t fixed_index_insert2(fixed_index_t *Store, const char *Key) {
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
 
 		//sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
-#if defined(Mingw) || defined(Android)
+#ifdef Mingw
 		qsort_s(Hashes, Store->Header->Size, sizeof(hash_t), compare_hashes, Store);
 #else
 		qsort_r(Hashes, Store->Header->Size, sizeof(hash_t), compare_hashes, Store);
