@@ -13,7 +13,7 @@ override CFLAGS += -std=gnu99 -fstrict-aliasing -Wstrict-aliasing -Wall \
 ifdef DEBUG
 	override CFLAGS += -g -DGC_DEBUG -DDEBUG
 else
-	override CFLAGS += -O3 -g -momit-leaf-frame-pointer -foptimize-sibling-calls -fno-stack-protector -march=native -mtune=native -mno-sse2 -minline-all-stringops
+	override CFLAGS += -O3 -g -momit-leaf-frame-pointer -foptimize-sibling-calls -fno-stack-protector -march=native -mtune=native -minline-all-stringops
 endif
 
 ifeq ($(RADB_MEM), MALLOC)
@@ -37,16 +37,17 @@ endif
 
 ifeq ($(PLATFORM), Linux)
 	platform_objects +=
-	override CFLAGS += -fcf-protection=none -mno-align-stringops -fno-tree-loop-distribute-patterns
+	override CFLAGS += -mno-sse2 -fcf-protection=none -mno-align-stringops -fno-tree-loop-distribute-patterns
 endif
 
 ifeq ($(PLATFORM), FreeBSD)
 	platform_objects += 
-	override CFLAGS += -I/usr/local/include
+	override CFLAGS += -mno-sse2 -I/usr/local/include
 endif
 
 ifeq ($(PLATFORM), Darwin)
 	platform_objects += 
+	override CFLAGS += -mno-sse2 
 endif
 
 $(common_objects): config.h
