@@ -268,7 +268,7 @@ size_t string_index_get(string_index_t *Store, size_t Index, void *Buffer, size_
 int string_store_compare_unchecked(string_store_t *Store, const void *Other, size_t Length, size_t Index);
 int string_store_compare2_unchecked(string_store_t *Store, size_t Index1, size_t Index2);
 
-static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
+/*static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	hash_t *A = First;
 	hash_t *B = Last;
 	hash_t T = *A;
@@ -303,7 +303,7 @@ static void sort_hashes(string_index_t *Store, hash_t *First, hash_t *Last) {
 	*A = P;
 	if (First < A - 1) sort_hashes(Store, First, A - 1);
 	if (A + 1 < Last) sort_hashes(Store, A + 1, Last);
-}
+}*/
 
 index_result_t string_index_insert2(string_index_t *Store, const char *Key, size_t Length) {
 	if (!Length) Length = strlen(Key);
@@ -321,8 +321,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 				if (Cmp > 0) break;
 				if (Cmp == 0) return (index_result_t){Hashes[Index].Link, 0};
 			}
-			Index += Incr;
-			Index &= Mask;
+			Index = (Index + Incr) & Mask;
 		}
 		size_t Space = Store->Header->Space;
 		if (--Space > Store->Header->Size >> 3) {
@@ -377,8 +376,30 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 		Header->Space = Store->Header->Space + Store->Header->Deleted + (HashSize - Store->Header->Size);
 		Header->Deleted = 0;
 		for (int I = 0; I < HashSize; ++I) Header->Hashes[I].Link = INVALID_INDEX;
-
-		sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
+		hash_t *OldPtr = Hashes;
+		for (int64_t I = Store->Header->Size; --I >= 0; ++OldPtr) {
+			hash_t Old = *OldPtr;
+			if (Old.Link == INVALID_INDEX) continue;
+			unsigned int NewIncr = ((Old.Hash >> 8) | 1) & Mask;
+			unsigned int NewIndex = Old.Hash & Mask;
+			for (;;) {
+				if (Header->Hashes[NewIndex].Link == INVALID_INDEX) {
+					Header->Hashes[NewIndex] = Old;
+					break;
+				}
+				if (Header->Hashes[NewIndex].Hash < Old.Hash ||
+					(Header->Hashes[NewIndex].Hash == Old.Hash &&
+						string_store_compare2_unchecked(Store->Keys, Header->Hashes[NewIndex].Link, Old.Link) < 0)
+				) {
+					hash_t New = Header->Hashes[NewIndex];
+					Header->Hashes[NewIndex] = Old;
+					Old = New;
+					NewIncr = ((Old.Hash >> 8) | 1) & Mask;
+				}
+				NewIndex = (NewIndex + NewIncr) & Mask;
+			}
+		}
+		/*sort_hashes(Store, Hashes, Hashes + Store->Header->Size - 1);
 		for (hash_t *Old = Hashes; Old->Link < DELETED_INDEX; ++Old) {
 			unsigned long NewHash = Old->Hash;
 			unsigned int NewIncr = ((NewHash >> 8) | 1) & Mask;
@@ -388,7 +409,7 @@ index_result_t string_index_insert2(string_index_t *Store, const char *Key, size
 				NewIndex &= Mask;
 			}
 			Header->Hashes[NewIndex] = Old[0];
-		}
+		}*/
 		msync(Header, HeaderSize, MS_SYNC);
 		munmap(Header, HeaderSize);
 		close(HeaderFd);
