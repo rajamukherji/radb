@@ -57,7 +57,9 @@ endif
 
 ifeq ($(PLATFORM), Darwin)
 	platform_objects += 
-	override CFLAGS += -mno-sse2 
+ifeq ($(MACHINE), x64_64)
+	override CFLAGS += -mno-sse2
+endif  
 endif
 
 $(common_objects): config.h
